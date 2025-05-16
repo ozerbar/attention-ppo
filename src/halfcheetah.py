@@ -10,7 +10,7 @@ wandb.init(
     config={
         "policy_type": "MlpPolicy",
         "env_id": "HalfCheetah-v4",
-        "total_timesteps": 100_000,
+        "total_timesteps": 2_000_000,
         "learning_rate": 3e-4,
         "n_steps": 2048,
         "batch_size": 64,
@@ -32,7 +32,8 @@ model = PPO(
     batch_size=config.batch_size,
     gamma=config.gamma,
     clip_range=config.clip_range,
-    verbose=1
+    verbose=1,
+    tensorboard_log="./tensorboard_logs",
 )
 
 model.learn(
