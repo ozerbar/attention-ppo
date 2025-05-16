@@ -1,17 +1,3 @@
-'''
-
-#!/bin/bash
-
-for seed in 0 1 2
-do
-  python train_ppo.py --seed $seed &
-done
-
-wait
-
-'''
-
-
 import os
 import argparse
 import sys
@@ -29,27 +15,29 @@ parser.add_argument("--seed", type=int, required=True, help="Random seed for rep
 args = parser.parse_args()
 SEED = args.seed
 
-# Determine next free PPO directory like PPO1, PPO2, ...
-def get_next_save_dir(base_dir, prefix="PPO"):
-    os.makedirs(base_dir, exist_ok=True)
+# Get run batch directory from environment variable, fallback to default folder
+RUN_BATCH_DIR = os.environ.get("RUN_BATCH_DIR")
+if RUN_BATCH_DIR is None:
+    # Fallback (not recommended if you want batch grouping)
+    BASE_RUNS_DIR = "./runs"
     i = 1
-    while os.path.exists(os.path.join(base_dir, f"{prefix}{i}")):
+    while os.path.exists(os.path.join(BASE_RUNS_DIR, f"run{i}")):
         i += 1
-    return os.path.join(base_dir, f"{prefix}{i}")
+    RUN_BATCH_DIR = os.path.join(BASE_RUNS_DIR, f"run{i}")
+    os.makedirs(RUN_BATCH_DIR, exist_ok=True)
 
-# Base save location
-ROOT_SAVE_DIR = "./runs"
-RUN_DIR = get_next_save_dir(ROOT_SAVE_DIR)
-os.makedirs(RUN_DIR, exist_ok=True)  # 🔧 Ensure directory is created
+# Create seed-specific folder inside batch folder
+RUN_DIR = os.path.join(RUN_BATCH_DIR, f"PPO{SEED}")
+os.makedirs(RUN_DIR, exist_ok=True)
 
 # Initialize wandb
 wandb.init(
     project="halfcheetah-ppo",
     entity="adlr-01",
-    name=f"ppo-seed-{SEED}",  # Optional: gives unique name per run
+    name=f"ppo-seed-{SEED}",
     config={
         "policy_type": "MlpPolicy",
-        "env_id": "HalfCheetah-v4",
+        "env_id": "HalfCheetah-v5",
         "total_timesteps": 2_000_000,
         "learning_rate": 3e-4,
         "n_steps": 2048,
