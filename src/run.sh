@@ -28,7 +28,7 @@ OBS_REPEAT=1
 # Launch all seeds in parallel, passing ENV_NAME and RUN_BATCH_DIR to Python
 for seed in 0 1 2
 do
-  ENV_NAME="$ENV_NAME" RUN_BATCH_DIR="$RUN_BATCH_DIR" python src/train_ppo_exploded_obs.py --seed $seed --obs_repeat $OBS_REPEAT &
+  ENV_NAME="$ENV_NAME" RUN_BATCH_DIR="$RUN_BATCH_DIR" python src/train.py --seed $seed --obs_repeat $OBS_REPEAT &
 done
 
 wait
