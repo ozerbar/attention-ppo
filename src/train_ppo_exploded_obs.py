@@ -44,15 +44,18 @@ if RUN_BATCH_DIR is None:
 RUN_DIR = os.path.join(RUN_BATCH_DIR, f"PPO{SEED}")
 os.makedirs(RUN_DIR, exist_ok=True)
 
+
+ENV_NAME = os.environ.get("ENV_NAME")
+
 # Initialize wandb
 wandb.init(
-    project="halfcheetah-ppo",
+    project=f"{ENV_NAME.lower()}-ppo",
     entity="adlr-01",
     name=f"ppo-seed-{SEED}",
     config={
         "policy_type": "MlpPolicy",
-        "env_id": "HalfCheetah-v5",
-        "total_timesteps": 2_000_000,
+        "env_id": ENV_NAME,
+        "total_timesteps": 5_000_000,
         "learning_rate": 3e-4,
         "n_steps": 2048,
         "batch_size": 64,
@@ -73,8 +76,20 @@ with open(os.path.join(RUN_DIR, "parameters.yaml"), "w") as f:
 with open(os.path.join(RUN_DIR, "command.txt"), "w") as f:
     f.write("python " + " ".join(sys.argv) + "\n")
 
+
+print(f"Creating environment: {config.env_id}")
+try:
+    # Try to use the argument if supported
+    env = gym.make(config.env_id, exclude_current_positions_from_observation=False)  # optional: include root x-pos
+except TypeError as e:
+    if "unexpected keyword argument 'exclude_current_positions_from_observation'" in str(e):
+        print(f"Warning: {config.env_id} does not support 'exclude_current_positions_from_observation'. Creating without it.")
+        env = gym.make(config.env_id)
+    else:
+        raise  # re-raise other TypeErrors
+
 # Create and seed the environment
-env = gym.make(config.env_id, exclude_current_positions_from_observation=False)  # optional: include root x-pos
+
 env.reset(seed=SEED)
 env = Monitor(env)
 
@@ -97,7 +112,7 @@ model = PPO(
 
 # Save every 100,000 steps
 checkpoint_callback = CheckpointCallback(
-    save_freq=100_000,
+    save_freq=200_000,
     save_path=RUN_DIR,
     name_prefix="ppo_checkpoint"
 )

@@ -1,6 +1,7 @@
 /wandb
 /models
 /runs
+src/wandb
 
 *.zip
 
