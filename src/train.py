@@ -21,37 +21,29 @@ class ObservationRepeater(gym.ObservationWrapper):
     def observation(self, obs):
         return np.tile(obs, self.repeat)
 
-# Parse the random seed and obs_repeat from command line
+# Parse CLI arguments
 parser = argparse.ArgumentParser()
 parser.add_argument("--seed", type=int, required=True, help="Random seed for reproducibility")
 parser.add_argument("--obs_repeat", type=int, default=1, help="Observation repetition factor")
 args = parser.parse_args()
+
 SEED = args.seed
 OBS_REPEAT = args.obs_repeat
-
-# Get run batch directory from environment variable, fallback to default folder
+ENV_NAME = os.environ.get("ENV_NAME")
 RUN_BATCH_DIR = os.environ.get("RUN_BATCH_DIR")
-if RUN_BATCH_DIR is None:
-    # Fallback (not recommended if you want batch grouping)
-    BASE_RUNS_DIR = "./runs"
-    i = 1
-    while os.path.exists(os.path.join(BASE_RUNS_DIR, f"run{i}")):
-        i += 1
-    RUN_BATCH_DIR = os.path.join(BASE_RUNS_DIR, f"run{i}")
-    os.makedirs(RUN_BATCH_DIR, exist_ok=True)
+assert ENV_NAME is not None and RUN_BATCH_DIR is not None, "ENV_NAME and RUN_BATCH_DIR must be set!"
 
-# Create seed-specific folder inside batch folder
-RUN_DIR = os.path.join(RUN_BATCH_DIR, f"PPO{SEED}")
+RUN_DIR = os.path.join(RUN_BATCH_DIR, f"seed{SEED}")
 os.makedirs(RUN_DIR, exist_ok=True)
 
-
-ENV_NAME = os.environ.get("ENV_NAME")
+# Construct a descriptive run name
+run_name = f"{ENV_NAME.lower()}-x{OBS_REPEAT}-ppo-seed{SEED}"
 
 # Initialize wandb
 wandb.init(
     project=f"{ENV_NAME.lower()}-ppo",
     entity="adlr-01",
-    name=f"ppo-seed-{SEED}",
+    name=run_name,
     config={
         "policy_type": "MlpPolicy",
         "env_id": ENV_NAME,
@@ -68,27 +60,17 @@ wandb.init(
 
 config = wandb.config
 
-# Save parameters.yaml
+# Save run metadata
 with open(os.path.join(RUN_DIR, "parameters.yaml"), "w") as f:
     yaml.dump(dict(config), f)
-
-# Save command.txt
 with open(os.path.join(RUN_DIR, "command.txt"), "w") as f:
     f.write("python " + " ".join(sys.argv) + "\n")
 
-
-print(f"Creating environment: {config.env_id}")
+print(f"Creating environment: {ENV_NAME}")
 try:
-    # Try to use the argument if supported
-    env = gym.make(config.env_id, exclude_current_positions_from_observation=False)  # optional: include root x-pos
-except TypeError as e:
-    if "unexpected keyword argument 'exclude_current_positions_from_observation'" in str(e):
-        print(f"Warning: {config.env_id} does not support 'exclude_current_positions_from_observation'. Creating without it.")
-        env = gym.make(config.env_id)
-    else:
-        raise  # re-raise other TypeErrors
-
-# Create and seed the environment
+    env = gym.make(ENV_NAME, exclude_current_positions_from_observation=False)
+except TypeError:
+    env = gym.make(ENV_NAME)
 
 env.reset(seed=SEED)
 env = Monitor(env)
@@ -96,7 +78,7 @@ env = Monitor(env)
 if OBS_REPEAT > 1:
     env = ObservationRepeater(env, repeat=OBS_REPEAT)
 
-# Define the PPO model
+# Initialize PPO model
 model = PPO(
     config.policy_type,
     env,
@@ -110,31 +92,34 @@ model = PPO(
     tensorboard_log=os.path.join(RUN_DIR, "tensorboard"),
 )
 
-# Save every 100,000 steps
+# Setup callbacks
 checkpoint_callback = CheckpointCallback(
     save_freq=200_000,
     save_path=RUN_DIR,
-    name_prefix="ppo_checkpoint"
+    name_prefix="checkpoint"
 )
 
-# W&B callback
 wandb_callback = WandbCallback(
     gradient_save_freq=10,
     model_save_path=RUN_DIR,
     verbose=2
 )
 
-# Combine both callbacks
 callback = CallbackList([checkpoint_callback, wandb_callback])
 
-# Train the model
+# Train the agent
 model.learn(
     total_timesteps=config.total_timesteps,
     callback=callback
 )
 
-# Save final model
-model.save(os.path.join(RUN_DIR, "ppo_halfcheetah_final"))
+# Save and upload final model
+final_model_path = os.path.join(RUN_DIR, f"{run_name}_final.zip")
+model.save(final_model_path)
+print(f"Model saved to {final_model_path}")
 
-# Finish wandb run
+artifact = wandb.Artifact(name=run_name, type="model")
+artifact.add_file(final_model_path)
+wandb.log_artifact(artifact)
+
 wandb.finish()
