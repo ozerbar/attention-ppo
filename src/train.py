@@ -21,14 +21,26 @@ class ObservationRepeater(gym.ObservationWrapper):
     def observation(self, obs):
         return np.tile(obs, self.repeat)
 
+class ObservationNoiseAdder(gym.ObservationWrapper):
+    def __init__(self, env, noise_std=0.1):
+        super().__init__(env)
+        self.noise_std = noise_std
+        self.observation_space = env.observation_space
+
+    def observation(self, obs):
+        noise = np.random.normal(loc=0.0, scale=self.noise_std, size=obs.shape)
+        return obs + noise
+
 # Parse CLI arguments
 parser = argparse.ArgumentParser()
 parser.add_argument("--seed", type=int, required=True, help="Random seed for reproducibility")
 parser.add_argument("--obs_repeat", type=int, default=1, help="Observation repetition factor")
+parser.add_argument("--obs_noise", type=float, default=0.0, help="Std dev of Gaussian noise added to observations")
 args = parser.parse_args()
 
 SEED = args.seed
 OBS_REPEAT = args.obs_repeat
+OBS_NOISE = args.obs_noise
 ENV_NAME = os.environ.get("ENV_NAME")
 RUN_BATCH_DIR = os.environ.get("RUN_BATCH_DIR")
 assert ENV_NAME is not None and RUN_BATCH_DIR is not None, "ENV_NAME and RUN_BATCH_DIR must be set!"
@@ -37,7 +49,10 @@ RUN_DIR = os.path.join(RUN_BATCH_DIR, f"seed{SEED}")
 os.makedirs(RUN_DIR, exist_ok=True)
 
 # Construct a descriptive run name
-run_name = f"{ENV_NAME.lower()}-x{OBS_REPEAT}-ppo-seed{SEED}"
+if OBS_NOISE > 0:
+    run_name = f"{ENV_NAME.lower()}-x{OBS_REPEAT}-ppo-seed{SEED}-noise{OBS_NOISE}"
+else:
+    run_name = f"{ENV_NAME.lower()}-x{OBS_REPEAT}-ppo-seed{SEED}"
 
 # Initialize wandb
 wandb.init(
@@ -78,6 +93,9 @@ env = Monitor(env)
 if OBS_REPEAT > 1:
     env = ObservationRepeater(env, repeat=OBS_REPEAT)
 
+if OBS_NOISE > 0:
+    env = ObservationNoiseAdder(env, noise_std=OBS_NOISE)
+
 # Initialize PPO model
 model = PPO(
     config.policy_type,
@@ -102,7 +120,8 @@ checkpoint_callback = CheckpointCallback(
 wandb_callback = WandbCallback(
     gradient_save_freq=10,
     model_save_path=RUN_DIR,
-    verbose=2
+    verbose=2,
+    log="all",
 )
 
 callback = CallbackList([checkpoint_callback, wandb_callback])

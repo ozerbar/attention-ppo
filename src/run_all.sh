@@ -5,10 +5,11 @@ mkdir -p runs
 
 # SELECT ENVIRONMENT
 ENV_NAME="Pusher-v5"
-OBS_REPEAT=2  # <- set your observation repeat here
+OBS_REPEAT=1  # <- set your observation repeat here
+OBS_NOISE=0.1  # <- set your observation noise here
 
 # Use OBS_REPEAT in base env dir name
-BASE_ENV_DIR="runs/${ENV_NAME}-x${OBS_REPEAT}"
+BASE_ENV_DIR="runs/${ENV_NAME}-x${OBS_REPEAT}-obs_noise_${OBS_NOISE}"
 mkdir -p "$BASE_ENV_DIR"
 
 # Find next available runN folder
@@ -25,7 +26,7 @@ echo "Using run batch directory: $RUN_BATCH_DIR"
 for seed in 0 1 2
 do
   echo "Launching seed $seed"
-  ENV_NAME="$ENV_NAME" RUN_BATCH_DIR="$RUN_BATCH_DIR" python src/train.py --seed $seed --obs_repeat $OBS_REPEAT &
+  ENV_NAME="$ENV_NAME" RUN_BATCH_DIR="$RUN_BATCH_DIR" python src/train.py --seed $seed --obs_repeat $OBS_REPEAT --obs_noise  $OBS_NOISE &
 done
 
 wait
