@@ -1,11 +1,16 @@
 #!/bin/bash
 
-# Create top-level runs directory if it doesn't exist
-mkdir -p runs
-
 # Hardcoded environment name ## SELECT YOUR ENVIRONMENT HERE ##
 # ENV_NAME="HalfCheetah-v5"
 ENV_NAME="Pusher-v5"
+
+# Set desired observation repetition factor here
+OBS_REPEAT=4
+
+# ===================================================
+
+# Create top-level runs directory if it doesn't exist
+mkdir -p runs
 
 BASE_ENV_DIR="runs/$ENV_NAME"
 
@@ -21,9 +26,6 @@ RUN_BATCH_DIR="$BASE_ENV_DIR/run$i"
 
 mkdir -p "$RUN_BATCH_DIR"
 echo "Using run batch directory: $RUN_BATCH_DIR"
-
-# Set desired observation repetition factor here
-OBS_REPEAT=1
 
 # Launch all seeds in parallel, passing ENV_NAME and RUN_BATCH_DIR to Python
 for seed in 0 1 2
