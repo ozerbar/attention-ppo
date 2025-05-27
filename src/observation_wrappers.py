@@ -56,3 +56,25 @@ class ObservationNormalizer(gym.ObservationWrapper):
         normed = (obs - self.mid) / (self.scale + 1e-8)
         # replace any NaNs/infs from obs outside finite range
         return np.nan_to_num(normed, nan=0.0, posinf=1.0, neginf=-1.0)
+    
+class ObservationDimExpander(gym.ObservationWrapper):
+    """
+    Adds extra random noise dimensions to the observation.
+    """
+    def __init__(self, env, extra_dims=0, noise_std=1.0):
+        super().__init__(env)
+        self.extra_dims = extra_dims
+        self.noise_std = noise_std
+
+        low = np.concatenate([env.observation_space.low, -np.ones(extra_dims)])
+        high = np.concatenate([env.observation_space.high, np.ones(extra_dims)])
+
+        self.observation_space = gym.spaces.Box(
+            low=low,
+            high=high,
+            dtype=np.float32,
+        )
+
+    def observation(self, obs):
+        extra_noise = np.random.normal(0.0, self.noise_std, size=self.extra_dims)
+        return np.concatenate([obs, extra_noise])

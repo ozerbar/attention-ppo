@@ -2,9 +2,11 @@
 # Toggle self-attention with   ATTENTION=1 ./run_all_zoo.sh
 # ----------------------------------------------------------
 ENV_NAME="AntBulletEnv-v0"
-OBS_REPEAT=32
+OBS_REPEAT=1
 OBS_NOISE=0
 ATTENTION=0  # 1 or 0
+ANT_EXTRA_DIMS=10
+ANT_EXTRA_NOISE_STD=0.1
 
 # then your if-condition as is
 if [[ "$ATTENTION" -eq 1 ]]; then
@@ -52,7 +54,7 @@ for seed in 0 1 2; do
   echo "Launching seed $seed. TensorBoard logs: $TB_LOG_DIR"
   ANT_OBS_REPEAT=$OBS_REPEAT ANT_OBS_NOISE=$OBS_NOISE \
   WANDB_DIR="$SEED_DIR" \
-    python -m rl_zoo3.train \
+    python -m rl-baselines3-zoo.rl_zoo3.train \
     --algo ppo \
     --env $ENV_NAME \
     --conf-file "$CONFIG_FILE" \
