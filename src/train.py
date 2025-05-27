@@ -5,31 +5,13 @@ import yaml
 import numpy as np
 import gymnasium as gym
 import wandb
+import torch
+import torch.nn as nn
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from wandb.integration.sb3 import WandbCallback
-
-class ObservationRepeater(gym.ObservationWrapper):
-    def __init__(self, env, repeat=2):
-        super().__init__(env)
-        self.repeat = repeat
-        low = np.tile(env.observation_space.low, self.repeat)
-        high = np.tile(env.observation_space.high, self.repeat)
-        self.observation_space = gym.spaces.Box(low=low, high=high, dtype=env.observation_space.dtype)
-
-    def observation(self, obs):
-        return np.tile(obs, self.repeat)
-
-class ObservationNoiseAdder(gym.ObservationWrapper):
-    def __init__(self, env, noise_std=0.1):
-        super().__init__(env)
-        self.noise_std = noise_std
-        self.observation_space = env.observation_space
-
-    def observation(self, obs):
-        noise = np.random.normal(loc=0.0, scale=self.noise_std, size=obs.shape)
-        return obs + noise
+from src.observation_wrappers import ObservationRepeater, ObservationNoiseAdder, ObservationNormalizer
 
 # Parse CLI arguments
 parser = argparse.ArgumentParser()
@@ -47,12 +29,37 @@ assert ENV_NAME is not None and RUN_BATCH_DIR is not None, "ENV_NAME and RUN_BAT
 
 RUN_DIR = os.path.join(RUN_BATCH_DIR, f"seed{SEED}")
 os.makedirs(RUN_DIR, exist_ok=True)
+# Load hyperparameters from YAML: hyperparams/{ENV_NAME}.yml
+hparams_path = os.path.join("hyperparams", f"{ENV_NAME}.yml")
+with open(hparams_path, "r") as f:
+    full_cfg = yaml.safe_load(f)
+
+if ENV_NAME not in full_cfg:
+    raise KeyError(f"{ENV_NAME} not found in {hparams_path}")
+
+hp = full_cfg[ENV_NAME]
+learning_rate = hp["learning_rate"]
+n_steps       = int(hp["n_steps"])
+batch_size    = int(hp["batch_size"])
+gamma         = float(hp["gamma"])
+clip_range    = float(hp["clip_range"])
+ent_coef      = float(hp.get("ent_coef", 0.0))
+vf_coef       = float(hp.get("vf_coef", 0.5))
+gae_lambda    = float(hp.get("gae_lambda", 1.0))
+max_grad_norm = float(hp.get("max_grad_norm", 0.5))
+n_epochs      = int(hp.get("n_epochs", 10))
+total_timesteps = int(hp.get("total_timesteps", 2_000_000))
+
+policy_kwargs = {}
+if "policy_kwargs" in hp:
+    policy_kwargs = eval(
+        hp["policy_kwargs"],
+        {"__builtins__": None},
+        {"nn": nn, "torch": torch, "dict": dict}
+    )
 
 # Construct a descriptive run name
-if OBS_NOISE > 0:
-    run_name = f"{ENV_NAME.lower()}-x{OBS_REPEAT}-ppo-seed{SEED}-noise{OBS_NOISE}"
-else:
-    run_name = f"{ENV_NAME.lower()}-x{OBS_REPEAT}-ppo-seed{SEED}"
+run_name = (f"{ENV_NAME.lower()}-x{OBS_REPEAT}-seed{SEED}" + (f"-noise{OBS_NOISE}" if OBS_NOISE > 0 else ""))
 
 # Initialize wandb
 wandb.init(
@@ -60,17 +67,11 @@ wandb.init(
     entity="adlr-01",
     name=run_name,
     config={
-        "policy_type": "MlpPolicy",
-        "env_id": ENV_NAME,
-        "total_timesteps": 5_000_000,
-        "learning_rate": 3e-4,
-        "n_steps": 2048,
-        "batch_size": 64,
-        "gamma": 0.99,
-        "clip_range": 0.2,
+        **hp,
         "seed": SEED,
         "obs_repeat": OBS_REPEAT,
-    }
+        "obs_noise": OBS_NOISE,
+    },
 )
 
 config = wandb.config
@@ -95,17 +96,26 @@ if OBS_REPEAT > 1:
 
 if OBS_NOISE > 0:
     env = ObservationNoiseAdder(env, noise_std=OBS_NOISE)
+    
+if hp.get("normalize", False):
+    env = ObservationNormalizer(env)
 
 # Initialize PPO model
 model = PPO(
-    config.policy_type,
+    hp.get("policy", "MlpPolicy"),
     env,
     seed=SEED,
-    learning_rate=config.learning_rate,
-    n_steps=config.n_steps,
-    batch_size=config.batch_size,
-    gamma=config.gamma,
-    clip_range=config.clip_range,
+    learning_rate=learning_rate,
+    n_steps=n_steps,
+    batch_size=batch_size,
+    gamma=gamma,
+    clip_range=clip_range,
+    ent_coef=ent_coef,
+    vf_coef=vf_coef,
+    gae_lambda=gae_lambda,
+    max_grad_norm=max_grad_norm,
+    n_epochs=n_epochs,
+    policy_kwargs=policy_kwargs,
     verbose=1,
     tensorboard_log=os.path.join(RUN_DIR, "tensorboard"),
 )

@@ -1,12 +1,12 @@
 #!/bin/bash
-
+export PYTHONPATH="$PYTHONPATH:$(pwd)"
 # Create top-level runs directory
 mkdir -p runs
 
 # SELECT ENVIRONMENT
-ENV_NAME="Pusher-v5"
+ENV_NAME="HalfCheetah-v4"  # <- set your environment name here
 OBS_REPEAT=1  # <- set your observation repeat here
-OBS_NOISE=0.1  # <- set your observation noise here
+OBS_NOISE=0.0  # <- set your observation noise here
 
 # Use OBS_REPEAT in base env dir name
 BASE_ENV_DIR="runs/${ENV_NAME}-x${OBS_REPEAT}-obs_noise_${OBS_NOISE}"
