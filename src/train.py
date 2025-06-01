@@ -5,90 +5,88 @@ import yaml
 import numpy as np
 import gymnasium as gym
 import wandb
+import torch
+import torch.nn as nn
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from wandb.integration.sb3 import WandbCallback
+from src.observation_wrappers import ObservationRepeater, ObservationNoiseAdder, ObservationNormalizer
 
-class ObservationRepeater(gym.ObservationWrapper):
-    def __init__(self, env, repeat=2):
-        super().__init__(env)
-        self.repeat = repeat
-        low = np.tile(env.observation_space.low, self.repeat)
-        high = np.tile(env.observation_space.high, self.repeat)
-        self.observation_space = gym.spaces.Box(low=low, high=high, dtype=env.observation_space.dtype)
-
-    def observation(self, obs):
-        return np.tile(obs, self.repeat)
-
-# Parse the random seed and obs_repeat from command line
+# Parse CLI arguments
 parser = argparse.ArgumentParser()
 parser.add_argument("--seed", type=int, required=True, help="Random seed for reproducibility")
 parser.add_argument("--obs_repeat", type=int, default=1, help="Observation repetition factor")
+parser.add_argument("--obs_noise", type=float, default=0.0, help="Std dev of Gaussian noise added to observations")
 args = parser.parse_args()
+
 SEED = args.seed
 OBS_REPEAT = args.obs_repeat
-
-# Get run batch directory from environment variable, fallback to default folder
-RUN_BATCH_DIR = os.environ.get("RUN_BATCH_DIR")
-if RUN_BATCH_DIR is None:
-    # Fallback (not recommended if you want batch grouping)
-    BASE_RUNS_DIR = "./runs"
-    i = 1
-    while os.path.exists(os.path.join(BASE_RUNS_DIR, f"run{i}")):
-        i += 1
-    RUN_BATCH_DIR = os.path.join(BASE_RUNS_DIR, f"run{i}")
-    os.makedirs(RUN_BATCH_DIR, exist_ok=True)
-
-# Create seed-specific folder inside batch folder
-RUN_DIR = os.path.join(RUN_BATCH_DIR, f"PPO{SEED}")
-os.makedirs(RUN_DIR, exist_ok=True)
-
-
+OBS_NOISE = args.obs_noise
 ENV_NAME = os.environ.get("ENV_NAME")
+RUN_BATCH_DIR = os.environ.get("RUN_BATCH_DIR")
+assert ENV_NAME is not None and RUN_BATCH_DIR is not None, "ENV_NAME and RUN_BATCH_DIR must be set!"
+
+RUN_DIR = os.path.join(RUN_BATCH_DIR, f"seed{SEED}")
+os.makedirs(RUN_DIR, exist_ok=True)
+# Load hyperparameters from YAML: hyperparams/{ENV_NAME}.yml
+hparams_path = os.path.join("hyperparams", f"{ENV_NAME}.yml")
+with open(hparams_path, "r") as f:
+    full_cfg = yaml.safe_load(f)
+
+if ENV_NAME not in full_cfg:
+    raise KeyError(f"{ENV_NAME} not found in {hparams_path}")
+
+hp = full_cfg[ENV_NAME]
+learning_rate = hp["learning_rate"]
+n_steps       = int(hp["n_steps"])
+batch_size    = int(hp["batch_size"])
+gamma         = float(hp["gamma"])
+clip_range    = float(hp["clip_range"])
+ent_coef      = float(hp.get("ent_coef", 0.0))
+vf_coef       = float(hp.get("vf_coef", 0.5))
+gae_lambda    = float(hp.get("gae_lambda", 1.0))
+max_grad_norm = float(hp.get("max_grad_norm", 0.5))
+n_epochs      = int(hp.get("n_epochs", 10))
+total_timesteps = int(hp.get("total_timesteps", 2_000_000))
+
+policy_kwargs = {}
+if "policy_kwargs" in hp:
+    policy_kwargs = eval(
+        hp["policy_kwargs"],
+        {"__builtins__": None},
+        {"nn": nn, "torch": torch, "dict": dict}
+    )
+
+# Construct a descriptive run name
+run_name = (f"{ENV_NAME.lower()}-x{OBS_REPEAT}-seed{SEED}" + (f"-noise{OBS_NOISE}" if OBS_NOISE > 0 else ""))
 
 # Initialize wandb
 wandb.init(
     project=f"{ENV_NAME.lower()}-ppo",
     entity="adlr-01",
-    name=f"ppo-seed-{SEED}",
+    name=run_name,
     config={
-        "policy_type": "MlpPolicy",
-        "env_id": ENV_NAME,
-        "total_timesteps": 5_000_000,
-        "learning_rate": 3e-4,
-        "n_steps": 2048,
-        "batch_size": 64,
-        "gamma": 0.99,
-        "clip_range": 0.2,
+        **hp,
         "seed": SEED,
         "obs_repeat": OBS_REPEAT,
-    }
+        "obs_noise": OBS_NOISE,
+    },
 )
 
 config = wandb.config
 
-# Save parameters.yaml
+# Save run metadata
 with open(os.path.join(RUN_DIR, "parameters.yaml"), "w") as f:
     yaml.dump(dict(config), f)
-
-# Save command.txt
 with open(os.path.join(RUN_DIR, "command.txt"), "w") as f:
     f.write("python " + " ".join(sys.argv) + "\n")
 
-
-print(f"Creating environment: {config.env_id}")
+print(f"Creating environment: {ENV_NAME}")
 try:
-    # Try to use the argument if supported
-    env = gym.make(config.env_id, exclude_current_positions_from_observation=False)  # optional: include root x-pos
-except TypeError as e:
-    if "unexpected keyword argument 'exclude_current_positions_from_observation'" in str(e):
-        print(f"Warning: {config.env_id} does not support 'exclude_current_positions_from_observation'. Creating without it.")
-        env = gym.make(config.env_id)
-    else:
-        raise  # re-raise other TypeErrors
-
-# Create and seed the environment
+    env = gym.make(ENV_NAME, exclude_current_positions_from_observation=False)
+except TypeError:
+    env = gym.make(ENV_NAME)
 
 env.reset(seed=SEED)
 env = Monitor(env)
@@ -96,45 +94,61 @@ env = Monitor(env)
 if OBS_REPEAT > 1:
     env = ObservationRepeater(env, repeat=OBS_REPEAT)
 
-# Define the PPO model
+if OBS_NOISE > 0:
+    env = ObservationNoiseAdder(env, noise_std=OBS_NOISE)
+    
+if hp.get("normalize", False):
+    env = ObservationNormalizer(env)
+
+# Initialize PPO model
 model = PPO(
-    config.policy_type,
+    hp.get("policy", "MlpPolicy"),
     env,
     seed=SEED,
-    learning_rate=config.learning_rate,
-    n_steps=config.n_steps,
-    batch_size=config.batch_size,
-    gamma=config.gamma,
-    clip_range=config.clip_range,
+    learning_rate=learning_rate,
+    n_steps=n_steps,
+    batch_size=batch_size,
+    gamma=gamma,
+    clip_range=clip_range,
+    ent_coef=ent_coef,
+    vf_coef=vf_coef,
+    gae_lambda=gae_lambda,
+    max_grad_norm=max_grad_norm,
+    n_epochs=n_epochs,
+    policy_kwargs=policy_kwargs,
     verbose=1,
     tensorboard_log=os.path.join(RUN_DIR, "tensorboard"),
 )
 
-# Save every 100,000 steps
+# Setup callbacks
 checkpoint_callback = CheckpointCallback(
     save_freq=200_000,
     save_path=RUN_DIR,
-    name_prefix="ppo_checkpoint"
+    name_prefix="checkpoint"
 )
 
-# W&B callback
 wandb_callback = WandbCallback(
     gradient_save_freq=10,
     model_save_path=RUN_DIR,
-    verbose=2
+    verbose=2,
+    log="all",
 )
 
-# Combine both callbacks
 callback = CallbackList([checkpoint_callback, wandb_callback])
 
-# Train the model
+# Train the agent
 model.learn(
     total_timesteps=config.total_timesteps,
     callback=callback
 )
 
-# Save final model
-model.save(os.path.join(RUN_DIR, "ppo_halfcheetah_final"))
+# Save and upload final model
+final_model_path = os.path.join(RUN_DIR, f"{run_name}_final.zip")
+model.save(final_model_path)
+print(f"Model saved to {final_model_path}")
 
-# Finish wandb run
+artifact = wandb.Artifact(name=run_name, type="model")
+artifact.add_file(final_model_path)
+wandb.log_artifact(artifact)
+
 wandb.finish()
