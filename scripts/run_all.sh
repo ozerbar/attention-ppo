@@ -8,8 +8,8 @@ ENV_NAME="AntBulletEnv-v0"  # <- set your environment name here
 OBS_REPEAT=1  # <- set your observation repeat here
 OBS_NOISE=0.0  # <- set your observation noise here
 
-ANT_EXTRA_DIMS=10 # Adds extra random noise dimensions to the observation.
-ANT_EXTRA_NOISE_STD=0.5
+ANT_EXTRA_DIMS=0 # Adds extra random noise dimensions to the observation.
+ANT_EXTRA_NOISE_STD=0.0
 
 # WANDB logging flag
 USE_WANDB=0  # set to 0 to disable wandb logging

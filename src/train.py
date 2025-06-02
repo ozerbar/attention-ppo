@@ -3,6 +3,7 @@ import argparse
 import sys
 import yaml
 import numpy as np
+import importlib
 import gymnasium as gym
 import pybullet_envs_gymnasium  # noqa: F401  (registers AntBullet‑v0)
 import wandb
@@ -59,6 +60,10 @@ gae_lambda    = float(hp.get("gae_lambda", 1.0))
 max_grad_norm = float(hp.get("max_grad_norm", 0.5))
 n_epochs      = int(hp.get("n_epochs", 10))
 total_timesteps = int(hp.get("total_timesteps", 2_000_000))
+n_envs          = int(hp.get("n_envs", 1))
+use_sde         = bool(hp.get("use_sde", False))
+sde_sample_freq = int(hp.get("sde_sample_freq", -1))
+
 
 policy_kwargs = {}
 if "policy_kwargs" in hp:
@@ -101,6 +106,12 @@ with open(os.path.join(RUN_DIR, "command.txt"), "w") as f:
     f.write("python " + " ".join(sys.argv) + "\n")
 
 # --- Environment creation using DummyVecEnv, VecNormalize, AddGaussianNoise ---
+env_wrapper_path = hp.get("env_wrapper", None)
+env_wrapper_cls = None
+if env_wrapper_path:
+    module_name, class_name = env_wrapper_path.rsplit(".", 1)
+    env_wrapper_cls = getattr(importlib.import_module(module_name), class_name)
+
 def make_env():
     def _thunk():
         try:
@@ -119,10 +130,14 @@ def make_env():
         env = Monitor(env)
         if OBS_REPEAT > 1:
             env = ObservationRepeater(env, repeat=OBS_REPEAT)
+        # Apply env_wrapper if specified
+        if env_wrapper_cls is not None:
+            env = env_wrapper_cls(env)
         return env
     return _thunk
 
-raw_vec = DummyVecEnv([make_env()])
+# Use n_envs for parallel environments
+raw_vec = DummyVecEnv([make_env() for _ in range(n_envs)])
 vec_norm = VecNormalize(raw_vec, norm_obs=True, norm_reward=False, training=True)
 
 if OBS_NOISE > 0:
@@ -135,7 +150,8 @@ if EXTRA_OBS_DIMS > 0:
                           std=EXTRA_OBS_NOISE_STD)
 else:
     env = vec_norm
-# Initialize PPO model
+
+# Initialize PPO model, passing use_sde and sde_sample_freq
 model = PPO(
     hp.get("policy", "MlpPolicy"),
     env,
@@ -151,7 +167,9 @@ model = PPO(
     max_grad_norm=max_grad_norm,
     n_epochs=n_epochs,
     policy_kwargs=policy_kwargs,
-    verbose=1,  # Set to 0 for less terminal output
+    use_sde=use_sde,
+    sde_sample_freq=sde_sample_freq,
+    verbose=1,
     tensorboard_log=os.path.join(RUN_DIR, "tensorboard"),
 )
 
