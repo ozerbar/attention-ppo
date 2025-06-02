@@ -13,18 +13,26 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from wandb.integration.sb3 import WandbCallback
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-from src.observation_wrappers import ObservationRepeater, ObservationNoiseAdder, ObservationNormalizer, AddGaussianNoise
+from src.observation_wrappers import (
+    ObservationRepeater,
+    AddGaussianNoise,
+    AddExtraObsDims,
+)
 
 # Parse CLI arguments
 parser = argparse.ArgumentParser()
 parser.add_argument("--seed", type=int, required=True, help="Random seed for reproducibility")
 parser.add_argument("--obs_repeat", type=int, default=1, help="Observation repetition factor")
 parser.add_argument("--obs_noise", type=float, default=0.0, help="Std dev of Gaussian noise added to observations")
+parser.add_argument("--extra_obs_dims", type=int, default=0, help="Number of extra random noise dims to add to observation")
+parser.add_argument("--extra_obs_noise_std", type=float, default=0.0, help="Stddev of extra random noise dims")
 args = parser.parse_args()
 
 SEED = args.seed
 OBS_REPEAT = args.obs_repeat
 OBS_NOISE = args.obs_noise
+EXTRA_OBS_DIMS = args.extra_obs_dims
+EXTRA_OBS_NOISE_STD = args.extra_obs_noise_std
 ENV_NAME = os.environ.get("ENV_NAME")
 RUN_BATCH_DIR = os.environ.get("RUN_BATCH_DIR")
 assert ENV_NAME is not None and RUN_BATCH_DIR is not None, "ENV_NAME and RUN_BATCH_DIR must be set!"
@@ -63,20 +71,28 @@ if "policy_kwargs" in hp:
 # Construct a descriptive run name
 run_name = (f"{ENV_NAME.lower()}-x{OBS_REPEAT}-seed{SEED}" + (f"-noise{OBS_NOISE}" if OBS_NOISE > 0 else ""))
 
-# Initialize wandb
-wandb.init(
-    project=f"{ENV_NAME.lower()}-ppo",
-    entity="adlr-01",
-    name=run_name,
-    config={
+USE_WANDB = os.environ.get("USE_WANDB", "1") != "0"
+if USE_WANDB:
+    # Initialize wandb
+    wandb.init(
+        project=f"{ENV_NAME.lower()}-ppo",
+        entity="adlr-01",
+        name=run_name,
+        config={
+            **hp,
+            "seed": SEED,
+            "obs_repeat": OBS_REPEAT,
+            "obs_noise": OBS_NOISE,
+        },
+    )
+    config = wandb.config
+else:
+    config = {
         **hp,
         "seed": SEED,
         "obs_repeat": OBS_REPEAT,
         "obs_noise": OBS_NOISE,
-    },
-)
-
-config = wandb.config
+    }
 
 # Save run metadata
 with open(os.path.join(RUN_DIR, "parameters.yaml"), "w") as f:
@@ -103,19 +119,22 @@ def make_env():
         env = Monitor(env)
         if OBS_REPEAT > 1:
             env = ObservationRepeater(env, repeat=OBS_REPEAT)
-        # Do not add noise here; will be handled by AddGaussianNoise after VecNormalize
-        # if hp.get("normalize", False):
-        #     env = ObservationNormalizer(env)
-        # return env
+        return env
     return _thunk
 
 raw_vec = DummyVecEnv([make_env()])
 vec_norm = VecNormalize(raw_vec, norm_obs=True, norm_reward=False, training=True)
+
 if OBS_NOISE > 0:
-    env = AddGaussianNoise(vec_norm, sigma=OBS_NOISE)
+    vec_norm = AddGaussianNoise(vec_norm, sigma=OBS_NOISE)
+
+# -------- add extra (unnormalised) noise dimensions ---------------------
+if EXTRA_OBS_DIMS > 0:
+    env = AddExtraObsDims(vec_norm,
+                          extra_dims=EXTRA_OBS_DIMS,
+                          std=EXTRA_OBS_NOISE_STD)
 else:
     env = vec_norm
-
 # Initialize PPO model
 model = PPO(
     hp.get("policy", "MlpPolicy"),
@@ -132,7 +151,7 @@ model = PPO(
     max_grad_norm=max_grad_norm,
     n_epochs=n_epochs,
     policy_kwargs=policy_kwargs,
-    verbose=1,
+    verbose=1,  # Set to 0 for less terminal output
     tensorboard_log=os.path.join(RUN_DIR, "tensorboard"),
 )
 
@@ -143,14 +162,16 @@ checkpoint_callback = CheckpointCallback(
     name_prefix="checkpoint"
 )
 
-wandb_callback = WandbCallback(
-    gradient_save_freq=10,
-    model_save_path=RUN_DIR,
-    verbose=2,
-    log="all",
-)
-
-callback = CallbackList([checkpoint_callback, wandb_callback])
+if USE_WANDB:
+    wandb_callback = WandbCallback(
+        gradient_save_freq=10,
+        model_save_path=RUN_DIR,
+        verbose=2,
+        log="all",
+    )
+    callback = CallbackList([checkpoint_callback, wandb_callback])
+else:
+    callback = CallbackList([checkpoint_callback])
 
 # Train the agent
 model.learn(
@@ -163,8 +184,8 @@ final_model_path = os.path.join(RUN_DIR, f"{run_name}_final.zip")
 model.save(final_model_path)
 print(f"Model saved to {final_model_path}")
 
-artifact = wandb.Artifact(name=run_name, type="model")
-artifact.add_file(final_model_path)
-wandb.log_artifact(artifact)
-
-wandb.finish()
+if USE_WANDB:
+    artifact = wandb.Artifact(name=run_name, type="model")
+    artifact.add_file(final_model_path)
+    wandb.log_artifact(artifact)
+    wandb.finish()
