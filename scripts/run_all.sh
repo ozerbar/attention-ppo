@@ -4,7 +4,7 @@ export PYTHONPATH="$PYTHONPATH:$(pwd)"
 mkdir -p runs
 
 # SELECT ENVIRONMENT
-ENV_NAME="HalfCheetah-v4"  # <- set your environment name here
+ENV_NAME="AntBulletEnv-v0"  # <- set your environment name here
 OBS_REPEAT=1  # <- set your observation repeat here
 OBS_NOISE=0.0  # <- set your observation noise here
 

@@ -9,6 +9,30 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from wandb.integration.sb3 import WandbCallback
+from stable_baselines3.common.vec_env import VecEnvWrapper
+
+
+class AddGaussianNoise(VecEnvWrapper):
+    # Added by ozerbar
+    def __init__(self, venv, sigma: float = 0.0, seed: int | None = None):
+        super().__init__(venv)
+        self.sigma = float(sigma)
+        self.rng = np.random.default_rng(seed)
+    def _add_noise(self, obs: np.ndarray) -> np.ndarray:
+        """Return *obs + N(0, sigma)* with the same shape as *obs*."""
+        noise = self.rng.normal(0.0, self.sigma, size=obs.shape)
+        return obs + noise
+    # ---------------------------------------------------------------------
+    # VecEnv‑required overrides
+    # ---------------------------------------------------------------------
+    def reset(self, **kwargs):
+        obs = self.venv.reset(**kwargs)
+        return self._add_noise(obs)
+    def step_wait(self): 
+        obs, rewards, dones, infos = self.venv.step_wait()
+        return self._add_noise(obs), rewards, dones, infos
+
+
 
 class ObservationRepeater(gym.ObservationWrapper):
     def __init__(self, env, repeat=2):

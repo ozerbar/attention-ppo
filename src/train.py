@@ -4,6 +4,7 @@ import sys
 import yaml
 import numpy as np
 import gymnasium as gym
+import pybullet_envs_gymnasium  # noqa: F401  (registers AntBullet‑v0)
 import wandb
 import torch
 import torch.nn as nn
@@ -11,7 +12,8 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from wandb.integration.sb3 import WandbCallback
-from src.observation_wrappers import ObservationRepeater, ObservationNoiseAdder, ObservationNormalizer
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from src.observation_wrappers import ObservationRepeater, ObservationNoiseAdder, ObservationNormalizer, AddGaussianNoise
 
 # Parse CLI arguments
 parser = argparse.ArgumentParser()
@@ -38,7 +40,7 @@ if ENV_NAME not in full_cfg:
     raise KeyError(f"{ENV_NAME} not found in {hparams_path}")
 
 hp = full_cfg[ENV_NAME]
-learning_rate = hp["learning_rate"]
+learning_rate = float(hp["learning_rate"])
 n_steps       = int(hp["n_steps"])
 batch_size    = int(hp["batch_size"])
 gamma         = float(hp["gamma"])
@@ -82,23 +84,37 @@ with open(os.path.join(RUN_DIR, "parameters.yaml"), "w") as f:
 with open(os.path.join(RUN_DIR, "command.txt"), "w") as f:
     f.write("python " + " ".join(sys.argv) + "\n")
 
-print(f"Creating environment: {ENV_NAME}")
-try:
-    env = gym.make(ENV_NAME, exclude_current_positions_from_observation=False)
-except TypeError:
-    env = gym.make(ENV_NAME)
+# --- Environment creation using DummyVecEnv, VecNormalize, AddGaussianNoise ---
+def make_env():
+    def _thunk():
+        try:
+            try:
+                env = gym.make(ENV_NAME, exclude_current_positions_from_observation=False)
+            except TypeError:
+                env = gym.make(ENV_NAME)
+        except Exception as e:
+            import gymnasium
+            if isinstance(e, gymnasium.error.NameNotFound):
+                print(f"ERROR: Environment '{ENV_NAME}' does not exist or is not installed. Please check your environment name and dependencies.")
+                sys.exit(1)
+            else:
+                raise
+        env.reset(seed=SEED)
+        env = Monitor(env)
+        if OBS_REPEAT > 1:
+            env = ObservationRepeater(env, repeat=OBS_REPEAT)
+        # Do not add noise here; will be handled by AddGaussianNoise after VecNormalize
+        # if hp.get("normalize", False):
+        #     env = ObservationNormalizer(env)
+        # return env
+    return _thunk
 
-env.reset(seed=SEED)
-env = Monitor(env)
-
-if OBS_REPEAT > 1:
-    env = ObservationRepeater(env, repeat=OBS_REPEAT)
-
+raw_vec = DummyVecEnv([make_env()])
+vec_norm = VecNormalize(raw_vec, norm_obs=True, norm_reward=False, training=True)
 if OBS_NOISE > 0:
-    env = ObservationNoiseAdder(env, noise_std=OBS_NOISE)
-    
-if hp.get("normalize", False):
-    env = ObservationNormalizer(env)
+    env = AddGaussianNoise(vec_norm, sigma=OBS_NOISE)
+else:
+    env = vec_norm
 
 # Initialize PPO model
 model = PPO(
@@ -138,7 +154,7 @@ callback = CallbackList([checkpoint_callback, wandb_callback])
 
 # Train the agent
 model.learn(
-    total_timesteps=config.total_timesteps,
+    total_timesteps=total_timesteps,
     callback=callback
 )
 
