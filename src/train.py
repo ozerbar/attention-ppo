@@ -120,8 +120,7 @@ def make_env():
             except TypeError:
                 env = gym.make(ENV_NAME)
         except Exception as e:
-            import gymnasium
-            if isinstance(e, gymnasium.error.NameNotFound):
+            if isinstance(e, gym.error.NameNotFound):
                 print(f"ERROR: Environment '{ENV_NAME}' does not exist or is not installed. Please check your environment name and dependencies.")
                 sys.exit(1)
             else:
@@ -132,7 +131,7 @@ def make_env():
             env = ObservationRepeater(env, repeat=OBS_REPEAT)
         # Apply env_wrapper if specified
         if env_wrapper_cls is not None:
-            env = env_wrapper_cls(env)
+            env = env_wrapper_cls(env) # TimeFeatureWrapper in AntBullet-v0
         return env
     return _thunk
 
