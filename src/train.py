@@ -9,6 +9,7 @@ import pybullet_envs_gymnasium  # noqa: F401  (registers AntBullet‑v0)
 import wandb
 import torch
 import torch.nn as nn
+import json
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
@@ -196,13 +197,72 @@ model.learn(
     callback=callback
 )
 
-# Save and upload final model
-final_model_path = os.path.join(RUN_DIR, f"{run_name}_final.zip")
-model.save(final_model_path)
-print(f"Model saved to {final_model_path}")
 
-if USE_WANDB:
-    artifact = wandb.Artifact(name=run_name, type="model")
-    artifact.add_file(final_model_path)
-    wandb.log_artifact(artifact)
-    wandb.finish()
+# Save VecNormalize even if it's wrapped
+def find_vecnormalize(e):
+    while hasattr(e, 'venv'):
+        if isinstance(e, VecNormalize):
+            return e
+        e = e.venv
+    return None
+
+vec_to_save = find_vecnormalize(env)
+if vec_to_save is not None:
+    vecnorm_path = os.path.join(RUN_DIR, "vecnormalize.pkl")
+    vec_to_save.save(vecnorm_path)
+    print(f"VecNormalize stats saved to {vecnorm_path}")
+else:
+    print("Warning: VecNormalize not found in final env wrapper stack. Nothing saved.")
+
+# # Save wrapper stack structure
+# def unwrap_chain(env):
+#     stack = []
+#     while True:
+#         stack.append(env.__class__.__name__)
+#         if hasattr(env, "env"):           # Gym wrapper
+#             env = env.env
+#         elif hasattr(env, "venv"):        # SB3 VecEnv wrapper
+#             env = env.venv
+#         else:
+#             break
+#     return stack  # inner-to-outer
+
+def unwrap_chain(e):
+    """Return OUTER → INNER wrapper names covering both VecEnv and first worker."""
+    chain = []
+    def walk(obj):
+        chain.append(obj.__class__.__name__)
+        if hasattr(obj, "venv"):          # VecEnvWrapper
+            walk(obj.venv)
+        elif hasattr(obj, "env"):         # gym.Wrapper
+            walk(obj.env)
+        elif isinstance(obj, DummyVecEnv):
+            walk(obj.envs[0])             # dive into first worker
+    walk(e)
+    return chain
+
+wrapper_stack = unwrap_chain(env)          # env is the one given to PPO
+
+
+env_stack = {
+    "wrapper_stack": wrapper_stack,
+    "parameters": {
+        "obs_repeat": OBS_REPEAT,
+        "obs_noise": OBS_NOISE,
+        "extra_obs_dims": EXTRA_OBS_DIMS,
+        "extra_obs_noise_std": EXTRA_OBS_NOISE_STD,
+        "env_wrapper": env_wrapper_path,
+    },
+}
+
+with open(os.path.join(RUN_DIR, "env_stack.json"), "w") as f:
+    json.dump(env_stack, f, indent=2)
+print(f"Environment wrapper stack saved to {os.path.join(RUN_DIR, 'env_stack.json')}")
+
+
+# if USE_WANDB:
+#     artifact = wandb.Artifact(name=run_name, type="model")
+#     artifact.add_file(final_model_path)
+#     wandb.log_artifact(artifact)
+#     wandb.finish()
+
