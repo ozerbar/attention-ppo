@@ -48,24 +48,39 @@ hparams_path = os.path.join("hyperparams", f"{ENV_NAME}.yml")
 with open(hparams_path, "r") as f:
     full_cfg = yaml.safe_load(f)
 
-if ENV_NAME not in full_cfg:
-    raise KeyError(f"{ENV_NAME} not found in {hparams_path}")
+# Default PPO hyperparameters based on the provided list
+default_hparams = {
+    "learning_rate": 0.0003,
+    "n_steps": 2048,
+    "batch_size": 64,
+    "gamma": 0.99,
+    "clip_range": 0.2,
+    "ent_coef": 0.0,
+    "vf_coef": 0.5,
+    "gae_lambda": 0.95,
+    "max_grad_norm": 0.5,
+    "n_epochs": 10,
+    "n_timesteps": 2_000_000,
+    "use_sde": False,
+    "sde_sample_freq": -1,
+}
+
 
 hp = full_cfg[ENV_NAME]
-learning_rate = float(hp["learning_rate"])
-n_steps       = int(hp["n_steps"])
-batch_size    = int(hp["batch_size"])
-gamma         = float(hp["gamma"])
-clip_range    = float(hp["clip_range"])
-ent_coef      = float(hp.get("ent_coef", 0.0))
-vf_coef       = float(hp.get("vf_coef", 0.5))
-gae_lambda    = float(hp.get("gae_lambda", 1.0))
-max_grad_norm = float(hp.get("max_grad_norm", 0.5))
-n_epochs      = int(hp.get("n_epochs", 10))
-total_timesteps = int(hp.get("total_timesteps", 2_000_000))
-n_envs          = int(hp.get("n_envs", 1))
-use_sde         = bool(hp.get("use_sde", False))
-sde_sample_freq = int(hp.get("sde_sample_freq", -1))
+learning_rate = float(hp.get("learning_rate", default_hparams['learning_rate']))
+n_steps = int(hp.get("n_steps", default_hparams['n_steps']))
+batch_size = int(hp.get("batch_size", default_hparams['batch_size']))
+gamma = float(hp.get("gamma", default_hparams['gamma']))
+clip_range = float(hp.get("clip_range", default_hparams['clip_range']))
+ent_coef = float(hp.get("ent_coef", default_hparams['ent_coef']))
+vf_coef = float(hp.get("vf_coef", default_hparams['vf_coef']))
+gae_lambda = float(hp.get("gae_lambda", default_hparams['gae_lambda']))
+max_grad_norm = float(hp.get("max_grad_norm", default_hparams['max_grad_norm']))
+n_epochs = int(hp.get("n_epochs", default_hparams['n_epochs']))
+n_timesteps = int(hp.get("n_timesteps", default_hparams['n_timesteps']))
+n_envs = int(hp.get("n_envs", 1))  # Default to 1 if not specified in the YAML
+use_sde = bool(hp.get("use_sde", default_hparams['use_sde']))
+sde_sample_freq = int(hp.get("sde_sample_freq", default_hparams['sde_sample_freq']))
 
 
 policy_kwargs = {}
@@ -197,7 +212,7 @@ else:
 
 # Train the agent
 model.learn(
-    total_timesteps=total_timesteps,
+    total_timesteps=n_timesteps,
     callback=callback
 )
 
