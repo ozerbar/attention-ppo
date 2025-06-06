@@ -14,7 +14,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from wandb.integration.sb3 import WandbCallback
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, VecFrameStack
 from src.observation_wrappers import (
     ObservationRepeater,
     AddGaussianNoise,
@@ -28,6 +28,7 @@ parser.add_argument("--obs_repeat", type=int, default=1, help="Observation repet
 parser.add_argument("--obs_noise", type=float, default=0.0, help="Std dev of Gaussian noise added to observations")
 parser.add_argument("--extra_obs_dims", type=int, default=0, help="Number of extra random noise dims to add to observation")
 parser.add_argument("--extra_obs_noise_std", type=float, default=0.0, help="Stddev of extra random noise dims")
+parser.add_argument("--frame_stack", type=int, default=1, help="Number of frames to stack across time")
 args = parser.parse_args()
 
 SEED = args.seed
@@ -35,6 +36,7 @@ OBS_REPEAT = args.obs_repeat
 OBS_NOISE = args.obs_noise
 EXTRA_OBS_DIMS = args.extra_obs_dims
 EXTRA_OBS_NOISE_STD = args.extra_obs_noise_std
+FRAME_STACK = args.frame_stack
 ENV_NAME = os.environ.get("ENV_NAME")
 RUN_BATCH_DIR = os.environ.get("RUN_BATCH_DIR")
 assert ENV_NAME is not None and RUN_BATCH_DIR is not None, "ENV_NAME and RUN_BATCH_DIR must be set!"
@@ -138,6 +140,8 @@ def make_env():
 
 # Use n_envs for parallel environments
 raw_vec = DummyVecEnv([make_env() for _ in range(n_envs)])
+if FRAME_STACK > 1:
+    raw_vec = VecFrameStack(raw_vec, n_stack=FRAME_STACK)
 vec_norm = VecNormalize(raw_vec, norm_obs=True, norm_reward=False, training=True)
 
 if OBS_NOISE > 0:
@@ -214,19 +218,6 @@ if vec_to_save is not None:
 else:
     print("Warning: VecNormalize not found in final env wrapper stack. Nothing saved.")
 
-# # Save wrapper stack structure
-# def unwrap_chain(env):
-#     stack = []
-#     while True:
-#         stack.append(env.__class__.__name__)
-#         if hasattr(env, "env"):           # Gym wrapper
-#             env = env.env
-#         elif hasattr(env, "venv"):        # SB3 VecEnv wrapper
-#             env = env.venv
-#         else:
-#             break
-#     return stack  # inner-to-outer
-
 def unwrap_chain(e):
     """Return OUTER → INNER wrapper names covering both VecEnv and first worker."""
     chain = []
@@ -252,6 +243,7 @@ env_stack = {
         "extra_obs_dims": EXTRA_OBS_DIMS,
         "extra_obs_noise_std": EXTRA_OBS_NOISE_STD,
         "env_wrapper": env_wrapper_path,
+        "frame_stack": FRAME_STACK,
     },
 }
 
