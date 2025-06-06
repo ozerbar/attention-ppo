@@ -201,6 +201,9 @@ model.learn(
     callback=callback
 )
 
+final_model_path = os.path.join(RUN_DIR, f"{run_name}_final.zip")
+model.save(final_model_path)
+print(f"Final model saved to: {final_model_path}")
 
 # Save VecNormalize even if it's wrapped
 def find_vecnormalize(e):
