@@ -9,7 +9,7 @@ MountainCarContinuous-v0:
   n_envs: 1
   n_epochs: 10
   n_steps: 8
-  n_timesteps: 20_000
+  n_timesteps: 100_000
   normalize: true
   policy: "MlpPolicy"
   policy_kwargs: >

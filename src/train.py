@@ -155,8 +155,8 @@ def make_env():
 
 # Use n_envs for parallel environments
 raw_vec = DummyVecEnv([make_env() for _ in range(n_envs)])
-if FRAME_STACK > 1:
-    raw_vec = VecFrameStack(raw_vec, n_stack=FRAME_STACK)
+# if FRAME_STACK > 1:
+#     raw_vec = VecFrameStack(raw_vec, n_stack=FRAME_STACK)
 vec_norm = VecNormalize(raw_vec, norm_obs=True, norm_reward=False, training=True)
 
 if OBS_NOISE > 0:
@@ -169,6 +169,9 @@ if EXTRA_OBS_DIMS > 0:
                           std=EXTRA_OBS_NOISE_STD)
 else:
     env = vec_norm
+
+if FRAME_STACK > 1:
+    env = VecFrameStack(env, n_stack=FRAME_STACK)
 
 # Initialize PPO model, passing use_sde and sde_sample_freq
 model = PPO(
