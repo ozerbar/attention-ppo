@@ -25,7 +25,7 @@ from observation_wrappers import (
 # -------------------------------
 # Define run directory
 # -------------------------------
-RELATIVE_DIR = "runs/AntBulletEnv-v0-x1-obs_noise_0.0-extra_dims_0-extra_std_0.0-frames_10"
+RELATIVE_DIR = "runs/AntBulletEnv-v0/AntBulletEnv-v0-x1-obs_noise_0.0-extra_dims_0-extra_std_0.0-frames_10"
 
 RUN_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../", RELATIVE_DIR, "run1/seed0"))
 EPISODES = 5

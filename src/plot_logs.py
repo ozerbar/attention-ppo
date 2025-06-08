@@ -14,11 +14,15 @@ plt.rcParams.update({
     "legend.fontsize": 12,
     "xtick.labelsize": 12,
     "ytick.labelsize": 12,
-    "pdf.fonttype": 42,  # For editable text in PDFs
+
 })
 
 # === LOG DIRECTORY (set here) ===
-LOG_DIR = "../runs/AntBulletEnv-v0/AntBulletEnv-v0-x1-obs_noise_0.0-extra_dims_20-extra_std_1.0/run1"
+
+RELATIVE_DIR = "runs/AntBulletEnv-v0/AntBulletEnv-v0-x1-obs_noise_0.0-extra_dims_0-extra_std_0.0-frames_10"
+
+LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../", RELATIVE_DIR, "run1/"))
+
 OUTPUT_DIR = os.path.join(LOG_DIR, "plots")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -28,13 +32,13 @@ RUNS = sorted([
 ])
 
 def get_event_file(run_folder):
-    # Specifically look in run_folder/tensorboard/
-    tb_dir = os.path.join(run_folder, "tensorboard")
-    if os.path.isdir(tb_dir):
-        event_files = glob.glob(os.path.join(tb_dir, "events.out.tfevents.*"))
-        if event_files:
-            return event_files[0]
+    # Search all event files recursively under the run_folder
+    event_files = glob.glob(os.path.join(run_folder, "**", "events.out.tfevents.*"), recursive=True)
+    if event_files:
+        return event_files[0]
     return None
+
+
 
 def load_scalars(event_file):
     ea = event_accumulator.EventAccumulator(event_file)
@@ -69,7 +73,8 @@ for tag in sorted(all_tags):
             "step": [e.step for e in events],
             "value": [e.value for e in events],
         })
-        sns.lineplot(data=df, x="step", y="value", label=f"Seed {run}", ax=ax)
+        seed_number = ''.join(filter(str.isdigit, run))  # extracts the number from 'seed0', 'seed1', etc.
+        sns.lineplot(data=df, x="step", y="value", label=f"Seed = {seed_number}", ax=ax)
         has_data = True
 
     if has_data:
@@ -81,7 +86,7 @@ for tag in sorted(all_tags):
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         plt.tight_layout()
-        filename = os.path.join(OUTPUT_DIR, f"{tag.replace('/', '_')}.pdf")
+        filename = os.path.join(OUTPUT_DIR, f"{tag.replace('/', '_')}.png")
         plt.savefig(filename, bbox_inches="tight")
         print(f"[✓] Saved: {filename}")
         plt.close()
