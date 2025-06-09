@@ -4,6 +4,7 @@ from tensorboard.backend.event_processing import event_accumulator
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import re
 
 # === GLOBAL PLOT CONFIG ===
 sns.set_theme(style="whitegrid")
@@ -23,7 +24,7 @@ plt.rcParams.update({
 
 # LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../", RELATIVE_DIR, "run1/"))
 
-LOG_DIR  = "/home/ozerbar/tum-adlr-01/runs/Pusher-v5/obsx1"
+LOG_DIR  = "/home/ozerbar/tum-adlr-01/runs/Pusher-v5/obsx16/run1"
 
 
 ANNOTATE_MAX = True  # Whether to annotate the max value on "rollout/ep_rew_mean"
@@ -33,10 +34,6 @@ ANNOTATE_MAX = True  # Whether to annotate the max value on "rollout/ep_rew_mean
 OUTPUT_DIR = os.path.join(LOG_DIR, "plots")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-RUNS = sorted([
-    d for d in os.listdir(LOG_DIR)
-    if os.path.isdir(os.path.join(LOG_DIR, d))
-])
 
 def get_event_file(run_folder):
     # Search all event files recursively under the run_folder
@@ -52,19 +49,31 @@ def load_scalars(event_file):
     ea.Reload()
     return ea.Tags().get("scalars", []), ea
 
-# === GATHER ALL TAGS ===
-all_tags = set()
+# === COLLECT ALL RUN FOLDERS THAT CONTAIN TENSORBOARD FILES ===
+RUNS = []
 run_event_data = {}
+all_tags = set()
 
-for run in RUNS:
-    run_path = os.path.join(LOG_DIR, run)
-    event_file = get_event_file(run_path)
+candidate_dirs = [os.path.join(LOG_DIR, d) for d in os.listdir(LOG_DIR) if os.path.isdir(os.path.join(LOG_DIR, d))]
+
+for run_dir in candidate_dirs:
+    event_file = get_event_file(run_dir)
     if not event_file:
-        print(f"[!] No event file found in: {run_path}")
         continue
 
+    run_name = os.path.basename(run_dir)
+
+    # Try to extract a seed number intelligently
+    if "seed" in run_name.lower():
+        seed_label = run_name.lower()
+    elif "ppo" in run_name.lower():
+        seed_label = run_name.lower()
+    else:
+        # fallback to full folder name
+        seed_label = run_name
+
     tags, ea = load_scalars(event_file)
-    run_event_data[run] = (tags, ea)
+    run_event_data[seed_label] = (tags, ea)
     all_tags.update(tags)
 
 # === PLOT EACH TAG ===
@@ -84,8 +93,14 @@ for tag in sorted(all_tags):
         })
         all_values.extend(df["value"])
 
-        seed_number = ''.join(filter(str.isdigit, run))
-        sns.lineplot(data=df, x="step", y="value", label=f"Seed = {seed_number}", ax=ax, estimator=None)
+        match = re.search(r'\d+', run)
+        if match:
+            seed_number = match.group(0)
+            label = f"Seed = {seed_number}"
+        else:
+            label = f"Run: {run}"  # fallback if no digits
+
+        sns.lineplot(data=df, x="step", y="value", label=label, ax=ax, estimator=None)
         has_data = True
 
         if tag == "rollout/ep_rew_mean" and not df.empty:
