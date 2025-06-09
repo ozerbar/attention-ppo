@@ -64,6 +64,7 @@ for run in RUNS:
 for tag in sorted(all_tags):
     fig, ax = plt.subplots(figsize=(8, 4))
     has_data = False
+    all_values = []
 
     for run, (tags, ea) in run_event_data.items():
         if tag not in tags:
@@ -73,11 +74,19 @@ for tag in sorted(all_tags):
             "step": [e.step for e in events],
             "value": [e.value for e in events],
         })
+        all_values.extend(df["value"])  # collect for y-limits
         seed_number = ''.join(filter(str.isdigit, run))  # extracts the number from 'seed0', 'seed1', etc.
-        sns.lineplot(data=df, x="step", y="value", label=f"Seed = {seed_number}", ax=ax)
+        sns.lineplot(data=df, x="step", y="value", label=f"Seed = {seed_number}", ax=ax, estimator=None)
         has_data = True
 
     if has_data:
+        # Auto y-axis limits with small padding
+        if all_values:
+            ymin = min(all_values)
+            ymax = max(all_values)
+            padding = 0.1 * (ymax - ymin) if ymax > ymin else 1.0
+            ax.set_ylim(ymin - padding, ymax + padding)
+
         clean_tag = tag.replace("rollout/", "").replace("_", " ").title()
         ax.set_title(clean_tag)
         ax.set_xlabel("Timesteps")
