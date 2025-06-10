@@ -24,7 +24,7 @@ plt.rcParams.update({
 
 # LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../", RELATIVE_DIR, "run1/"))
 
-LOG_DIR  = "/home/ozerbar/tum-adlr-01/runs/Pusher-v5/obsx16/run1"
+LOG_DIR  = "/home/ozerbar/tum-adlr-01/runs/AntBulletEnv-v0/AntBulletEnv-v0-zoo-repeat32-noise0/run1"
 
 
 ANNOTATE_MAX = True  # Whether to annotate the max value on "rollout/ep_rew_mean"
@@ -103,7 +103,7 @@ for tag in sorted(all_tags):
         sns.lineplot(data=df, x="step", y="value", label=label, ax=ax, estimator=None)
         has_data = True
 
-        if tag == "rollout/ep_rew_mean" and not df.empty:
+        if tag == "rollout/ep_rew_mean" or "eval/mean_reward" and not df.empty:
             idxmax = df["value"].idxmax()
             max_step = df.loc[idxmax, "step"]
             max_value = df.loc[idxmax, "value"]
