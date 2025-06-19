@@ -1,6 +1,6 @@
 # src/custom_extractors.py
 import math
-import torch as th
+import torch
 import torch.nn as nn
 from gymnasium import spaces
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
@@ -21,18 +21,24 @@ class ScalarTokenTransformer(BaseFeaturesExtractor):
         self.n_tokens = observation_space.shape[0]
 
         self.token_proj = nn.Linear(1, embed_dim)
-        self.pos_embedding = nn.Parameter(th.zeros(1, self.n_tokens, embed_dim))
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.pos_embedding = nn.Parameter(torch.zeros(1, self.n_tokens + 1, embed_dim))
+        nn.init.trunc_normal_(self.pos_embedding, std=0.02)
 
         self.layers = nn.Sequential(*[
             ScalarTokenAttention(embed_dim, n_heads, dropout)
             for _ in range(n_layers)
         ])
 
-    def forward(self, obs: th.Tensor) -> th.Tensor:
+    def forward(self, obs: torch.Tensor) -> torch.Tensor:
         print("Obs shape:", obs.shape)
         B, N = obs.shape
         x = obs.view(B, N, 1)                          # (B, N, 1)
-        x = self.token_proj(x) + self.pos_embedding   # (B, N, D)
+        x = self.token_proj(x)                # (B, N, D)
+        cls = self.cls_token.expand(B, 1, -1)
+        x = torch.cat((cls, x), dim=1)                     # (B, N+1, D)
+        x = x + self.pos_embedding[:, :x.shape[1], :]  # (B, N+1, D)
+        
         x = self.layers(x)                            # (B, N, D)
 
-        return x
+        return x[:, 0] # cls token
