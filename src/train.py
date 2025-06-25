@@ -20,6 +20,7 @@ from src.observation_wrappers import (
     AddGaussianNoise,
     AddExtraObsDims,
 )
+from src.custom_policy import SelectiveAttentionPolicy
 
 # Parse CLI arguments
 parser = argparse.ArgumentParser()
@@ -29,6 +30,10 @@ parser.add_argument("--obs_noise", type=float, default=0.0, help="Std dev of Gau
 parser.add_argument("--extra_obs_dims", type=int, default=0, help="Number of extra random noise dims to add to observation")
 parser.add_argument("--extra_obs_noise_std", type=float, default=0.0, help="Stddev of extra random noise dims")
 parser.add_argument("--frame_stack", type=int, default=1, help="Number of frames to stack across time")
+parser.add_argument("--conf-file", type=str, default=None, help="Path to the hyperparameter file")
+parser.add_argument("--policy", type=str, default="MlpPolicy", help="Policy to use. E.g. MlpPolicy, SelectiveAttentionPolicy")
+parser.add_argument("--attn_act", action="store_true", help="Use attention in actor network of SelectiveAttentionPolicy")
+parser.add_argument("--attn_val", action="store_true", help="Use attention in value network of SelectiveAttentionPolicy")
 args = parser.parse_args()
 
 SEED = args.seed
@@ -37,14 +42,23 @@ OBS_NOISE = args.obs_noise
 EXTRA_OBS_DIMS = args.extra_obs_dims
 EXTRA_OBS_NOISE_STD = args.extra_obs_noise_std
 FRAME_STACK = args.frame_stack
+POLICY = args.policy
+ATTN_ACT = args.attn_act
+ATTN_VAL = args.attn_val
+CONF_FILE = args.conf_file
 ENV_NAME = os.environ.get("ENV_NAME")
 RUN_BATCH_DIR = os.environ.get("RUN_BATCH_DIR")
 assert ENV_NAME is not None and RUN_BATCH_DIR is not None, "ENV_NAME and RUN_BATCH_DIR must be set!"
 
 RUN_DIR = os.path.join(RUN_BATCH_DIR, f"seed{SEED}")
 os.makedirs(RUN_DIR, exist_ok=True)
-# Load hyperparameters from YAML: hyperparams/{ENV_NAME}.yml
-hparams_path = os.path.join("hyperparams", f"{ENV_NAME}.yml")
+
+# Load hyperparameters from YAML
+if CONF_FILE:
+    hparams_path = CONF_FILE
+else:
+    hparams_path = os.path.join("hyperparams", f"{ENV_NAME}.yml")
+
 with open(hparams_path, "r") as f:
     full_cfg = yaml.safe_load(f)
 
@@ -90,6 +104,11 @@ if "policy_kwargs" in hp:
         {"__builtins__": None},
         {"nn": nn, "torch": torch, "dict": dict}
     )
+if POLICY == "SelectiveAttentionPolicy":
+    policy_kwargs.update({
+        "attn_act": ATTN_ACT,
+        "attn_val": ATTN_VAL,
+    })
 
 # Construct a descriptive run name
 run_name = (f"{ENV_NAME.lower()}-x{OBS_REPEAT}-seed{SEED}" + (f"-noise{OBS_NOISE}" if OBS_NOISE > 0 else ""))
@@ -155,8 +174,6 @@ def make_env():
 
 # Use n_envs for parallel environments
 raw_vec = DummyVecEnv([make_env() for _ in range(n_envs)])
-# if FRAME_STACK > 1:
-#     raw_vec = VecFrameStack(raw_vec, n_stack=FRAME_STACK)
 vec_norm = VecNormalize(raw_vec, norm_obs=True, norm_reward=False, training=True)
 
 if OBS_NOISE > 0:
@@ -173,9 +190,14 @@ else:
 if FRAME_STACK > 1:
     env = VecFrameStack(env, n_stack=FRAME_STACK)
 
+POLICY_REGISTRY = {
+    "MlpPolicy": "MlpPolicy",
+    "SelectiveAttentionPolicy": SelectiveAttentionPolicy,
+}
+
 # Initialize PPO model, passing use_sde and sde_sample_freq
 model = PPO(
-    hp.get("policy", "MlpPolicy"),
+    POLICY_REGISTRY[POLICY],
     env,
     seed=SEED,
     learning_rate=learning_rate,
@@ -194,6 +216,20 @@ model = PPO(
     verbose=1,
     tensorboard_log=os.path.join(RUN_DIR, "tensorboard"),
 )
+
+print("Policy:", model.policy)
+print("Obs shape:", model.observation_space.shape)
+print("Action shape:", model.action_space.shape)
+total_params = sum(p.numel() for p in model.policy.parameters() if p.requires_grad)
+print(f"Total number of trainable parameters: {total_params}")
+
+# --- Save model.policy architecture and parameter count as text ---
+policy_arch_path = os.path.join(RUN_DIR, f"{run_name}_policy_arch.txt")
+with open(policy_arch_path, "w") as f:
+    f.write(str(model.policy))
+    f.write("\n\n")
+    f.write(f"Policy parameters: {total_params}\n")
+print(f"Policy architecture and parameter count saved to: {policy_arch_path}")
 
 # Setup callbacks
 checkpoint_callback = CheckpointCallback(
@@ -273,9 +309,8 @@ with open(os.path.join(RUN_DIR, "env_stack.json"), "w") as f:
 print(f"Environment wrapper stack saved to {os.path.join(RUN_DIR, 'env_stack.json')}")
 
 
-# if USE_WANDB:
-#     artifact = wandb.Artifact(name=run_name, type="model")
-#     artifact.add_file(final_model_path)
-#     wandb.log_artifact(artifact)
-#     wandb.finish()
-
+if USE_WANDB:
+    artifact = wandb.Artifact(name=run_name, type="model")
+    artifact.add_file(final_model_path)
+    wandb.log_artifact(artifact)
+    wandb.finish()
