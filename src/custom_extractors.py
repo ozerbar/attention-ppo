@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from gymnasium import spaces
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, MlpExtractor
+from typing import Tuple
 
 
 class ScalarTokenAttention(nn.Module):
@@ -33,8 +34,8 @@ class FeatureAttention(nn.Module):
     """
     def __init__(self, obs_dim: int, d_model: int = 64, n_heads: int = 4):
         super().__init__()
-        # self.proj_in  = nn.Linear(1, d_model)          # scalar  → d_model
-        self.d_model  = d_model
+        self.proj_in  = nn.Linear(1, d_model)          # scalar  → d_model
+        # self.d_model  = d_model
         self.pos      = nn.Parameter(torch.zeros(1, obs_dim, d_model))
         self.attn     = nn.MultiheadAttention(d_model, n_heads, batch_first=True)
         self.proj_out = nn.Linear(d_model, 1)          # d_model → scalar
@@ -42,13 +43,29 @@ class FeatureAttention(nn.Module):
     def forward(self, x_flat: torch.Tensor) -> torch.Tensor:
         # x_flat: (B, obs_dim)
         # h = self.proj_in(x_flat.unsqueeze(-1)) + self.pos      # (B, D, d_model)
-        h = x_flat.unsqueeze(-1).expand(-1, -1, self.d_model) + self.pos
+        h = self.proj_in(x_flat.unsqueeze(-1)) + self.pos 
         h, _ = self.attn(h, h, h)                              # self-attention over D tokens
         return self.proj_out(h).squeeze(-1)                    # back to (B, obs_dim)
+    
+class AttentionLayerBlock(nn.Module):
+    def __init__(self, obs_dim: int = 87, d_model: int = 64, n_heads: int = 2):
+        super().__init__()
+        self.input_proj = nn.Linear(1, d_model)        # (B, 87, 1) → (B, 87, d_model)
+        self.attn = nn.MultiheadAttention(d_model, n_heads, batch_first=True)
+        self.token_proj = nn.Linear(d_model, 1)        # (B, 87, d_model) → (B, 87, 1)
+        self.relu = nn.ReLU()
 
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.unsqueeze(-1)              # (B, 87) → (B, 87, 1)
+        x = self.input_proj(x)           # → (B, 87, 64)
+        x, _ = self.attn(x, x, x)        # → (B, 87, 64)
+        x = self.relu(x)
+        x = self.token_proj(x)           # → (B, 87, 1)
+        x = x.squeeze(-1)                # → (B, 87)
+        return x
 
 class ScalarTokenTransformer(BaseFeaturesExtractor):
-    def __init__(self, observation_space: spaces.Box, embed_dim=64, n_heads=2, n_layers=2, dropout=0.1):
+    def __init__(self, observation_space: spaces.Box, embed_dim=128, n_heads=2, n_layers=2, dropout=0.1):
         super().__init__(observation_space, features_dim=embed_dim)
         self.n_tokens = observation_space.shape[0]
 
@@ -97,3 +114,40 @@ class AttnMlpExtractor(MlpExtractor):
         pi_latent = self.policy_net(self.attn_pi(features))
         vf_latent = self.value_net(self.attn_vf(features))
         return pi_latent, vf_latent
+    
+
+class AttnExtractor(nn.Module):
+    def __init__(self, feature_dim, net_arch, activation_fn, device='cpu',
+                 use_attn_pi=True, use_attn_vf=True):
+        super().__init__()
+        self.device = device
+
+        def make_branch(use_attn: bool):
+            layers = []
+            if use_attn:
+                layers.append(AttentionLayerBlock(obs_dim=feature_dim, d_model=128, n_heads=2))
+                in_dim = feature_dim  # attention outputs shape (B, 87)
+            else:
+                layers.append(nn.Identity())
+                in_dim = feature_dim  # still 87
+
+            layers.append(nn.Linear(in_dim, 256))
+            layers.append(activation_fn())
+            layers.append(nn.Linear(256, 256))
+            layers.append(activation_fn())
+            return nn.Sequential(*layers)
+
+        self.policy_net = make_branch(use_attn_pi)
+        self.value_net  = make_branch(use_attn_vf)
+
+        self.latent_dim_pi = 256
+        self.latent_dim_vf = 256
+
+    def forward_actor(self, features: torch.Tensor) -> torch.Tensor:
+        return self.policy_net(features)
+
+    def forward_critic(self, features: torch.Tensor) -> torch.Tensor:
+        return self.value_net(features)
+
+    def forward(self, features: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        return self.forward_actor(features), self.forward_critic(features)

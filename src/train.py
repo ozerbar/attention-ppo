@@ -20,7 +20,7 @@ from src.observation_wrappers import (
     AddGaussianNoise,
     AddExtraObsDims,
 )
-from src.custom_policy import SelectiveAttentionPolicy
+from src.custom_policy import SelectiveAttentionPolicy, AttentionPolicy
 
 # Parse CLI arguments
 parser = argparse.ArgumentParser()
@@ -104,7 +104,7 @@ if "policy_kwargs" in hp:
         {"__builtins__": None},
         {"nn": nn, "torch": torch, "dict": dict}
     )
-if POLICY == "SelectiveAttentionPolicy":
+if POLICY == "AttentionPolicy":
     policy_kwargs.update({
         "attn_act": ATTN_ACT,
         "attn_val": ATTN_VAL,
@@ -192,9 +192,11 @@ if FRAME_STACK > 1:
 
 POLICY_REGISTRY = {
     "MlpPolicy": "MlpPolicy",
-    "SelectiveAttentionPolicy": SelectiveAttentionPolicy,
+    "AttentionPolicy": AttentionPolicy,
 }
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = "cpu"
+print("Using device:", device)
 # Initialize PPO model, passing use_sde and sde_sample_freq
 model = PPO(
     POLICY_REGISTRY[POLICY],
@@ -207,6 +209,7 @@ model = PPO(
     clip_range=clip_range,
     ent_coef=ent_coef,
     vf_coef=vf_coef,
+    device=device,
     gae_lambda=gae_lambda,
     max_grad_norm=max_grad_norm,
     n_epochs=n_epochs,
@@ -216,6 +219,8 @@ model = PPO(
     verbose=1,
     tensorboard_log=os.path.join(RUN_DIR, "tensorboard"),
 )
+print(torch.cuda.memory_allocated() / 1e6, "MB used")
+print(torch.cuda.memory_summary(device))
 
 print("Policy:", model.policy)
 print("Obs shape:", model.observation_space.shape)
