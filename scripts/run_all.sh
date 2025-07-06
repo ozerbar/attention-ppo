@@ -63,7 +63,7 @@ mkdir -p "$RUN_BATCH_DIR"
 echo "Using run batch directory: $RUN_BATCH_DIR"
 
 # Launch seeds
-for seed in 0 
+for seed in 0 1 2
 do
   echo "Launching seed $seed"
   # Pass environment variables and arguments to the training script
