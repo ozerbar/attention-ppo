@@ -34,6 +34,7 @@ parser.add_argument("--conf-file", type=str, default=None, help="Path to the hyp
 parser.add_argument("--policy", type=str, default="MlpPolicy", help="Policy to use. E.g. MlpPolicy, SelectiveAttentionPolicy")
 parser.add_argument("--attn_act", action="store_true", help="Use attention in actor network of SelectiveAttentionPolicy")
 parser.add_argument("--attn_val", action="store_true", help="Use attention in value network of SelectiveAttentionPolicy")
+parser.add_argument("--attn_common", action="store_true", help="Use attention in value network of SelectiveAttentionPolicy")
 args = parser.parse_args()
 
 SEED = args.seed
@@ -45,6 +46,7 @@ FRAME_STACK = args.frame_stack
 POLICY = args.policy
 ATTN_ACT = args.attn_act
 ATTN_VAL = args.attn_val
+ATTN_COMMON = args.attn_common
 CONF_FILE = args.conf_file
 ENV_NAME = os.environ.get("ENV_NAME")
 RUN_BATCH_DIR = os.environ.get("RUN_BATCH_DIR")
@@ -108,6 +110,13 @@ if POLICY == "AttentionPolicy":
     policy_kwargs.update({
         "attn_act": ATTN_ACT,
         "attn_val": ATTN_VAL,
+    })
+
+if POLICY == "SelectiveAttentionPolicy":
+    policy_kwargs.update({
+        "attn_act": ATTN_ACT,
+        "attn_val": ATTN_VAL,
+        "attn_common": ATTN_COMMON,
     })
 
 # Construct a descriptive run name
@@ -193,6 +202,7 @@ if FRAME_STACK > 1:
 POLICY_REGISTRY = {
     "MlpPolicy": "MlpPolicy",
     "AttentionPolicy": AttentionPolicy,
+    "SelectiveAttentionPolicy": SelectiveAttentionPolicy,
 }
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = "cpu"

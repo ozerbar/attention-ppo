@@ -12,20 +12,21 @@ EXTRA_OBS_NOISE_STD=0.0
 FRAME_STACK=3               # Number of frames to stack in the observation
 
 # Attention flags
-ATTN_ACT=true
+ATTN_ACT=false
 ATTN_VAL=false
+ATTN_COMMON=true  # Use common attention for both actor and critic
 
 # WANDB logging flag
-USE_WANDB=1  # set to 0 to disable wandb logging
+USE_WANDB=0  # set to 0 to disable wandb logging
 
 # --- Determine policy, config file, and run tags based on attention flags ---
 POLICY="MlpPolicy"
 CONF_FILE="hyperparams/${ENV_NAME}.yml"
 ATTN_TAG=""
-if [ "$ATTN_ACT" = "true" ] || [ "$ATTN_VAL" = "true" ]; then
+if [ "$ATTN_ACT" = "true" ] || [ "$ATTN_VAL" = "true" ] || [ "$ATTN_COMMON" = "true" ]; then
     POLICY="SelectiveAttentionPolicy"
     CONF_FILE="hyperparams/${ENV_NAME}-attn.yml"
-    ATTN_TAG="-attn_act${ATTN_ACT}-attn_val${ATTN_VAL}"
+    ATTN_TAG="-attn_act${ATTN_ACT}-attn_val${ATTN_VAL}-attn_common${ATTN_COMMON}"
 fi
 
 # --- Construct arguments for train.py ---
@@ -43,6 +44,9 @@ fi
 if [ "$ATTN_VAL" = "true" ]; then
     set -- "$@" --attn_val
 fi
+if [ "$ATTN_COMMON" = "true" ]; then
+    set -- "$@" --attn_common
+fi
 
 # --- Set up run directory ---
 BASE_ENV_DIR="runs/${ENV_NAME}/${ENV_NAME}-x${OBS_REPEAT}-obs_noise_${OBS_NOISE}-extra_dims_${EXTRA_OBS_DIMS}-extra_std_${EXTRA_OBS_NOISE_STD}-frames_${FRAME_STACK}${ATTN_TAG}"
@@ -59,7 +63,7 @@ mkdir -p "$RUN_BATCH_DIR"
 echo "Using run batch directory: $RUN_BATCH_DIR"
 
 # Launch seeds
-for seed in 0 1 2
+for seed in 0 
 do
   echo "Launching seed $seed"
   # Pass environment variables and arguments to the training script

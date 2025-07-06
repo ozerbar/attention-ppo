@@ -103,14 +103,16 @@ class ScalarTokenTransformer(BaseFeaturesExtractor):
     
 class AttnMlpExtractor(MlpExtractor):
     def __init__(self, feature_dim: int, *,
-                 use_attn_pi: bool, use_attn_vf: bool,
+                 use_attn_pi: bool, use_attn_vf: bool,use_attn_common: bool,
                  **mlp_kwargs):
         super().__init__(feature_dim, **mlp_kwargs)
 
         self.attn_pi = FeatureAttention(feature_dim) if use_attn_pi else nn.Identity()
         self.attn_vf = FeatureAttention(feature_dim) if use_attn_vf else nn.Identity()
+        self.attn_common = FeatureAttention(feature_dim) if use_attn_common else nn.Identity()
 
     def forward(self, features: torch.Tensor):
+        features = self.attn_common(features)
         pi_latent = self.policy_net(self.attn_pi(features))
         vf_latent = self.value_net(self.attn_vf(features))
         return pi_latent, vf_latent

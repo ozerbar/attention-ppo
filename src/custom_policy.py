@@ -20,8 +20,10 @@ class TransformerPolicy(ActorCriticPolicy):
         
 class SelectiveAttentionPolicy(ActorCriticPolicy):
     def __init__(self, *args, **kwargs):
-        self.attn_act = kwargs.pop("attn_act", True)
+        print(f"kwargs received: {kwargs}")
+        self.attn_act = kwargs.pop("attn_act", False)
         self.attn_val = kwargs.pop("attn_val", False)
+        self.attn_common = kwargs.pop("attn_common", False) # Use common attention for both actor and critic
         kwargs.pop("features_extractor_kwargs", None)
         super().__init__(*args, **kwargs)
 
@@ -30,6 +32,7 @@ class SelectiveAttentionPolicy(ActorCriticPolicy):
             feature_dim   = self.features_dim,
             use_attn_pi   = self.attn_act,
             use_attn_vf   = self.attn_val,
+            use_attn_common = self.attn_common,
             net_arch      = self.net_arch,
             activation_fn = self.activation_fn,
             device        = self.device,
