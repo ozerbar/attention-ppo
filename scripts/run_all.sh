@@ -9,12 +9,15 @@ OBS_REPEAT=1                # <- set your observation repeat here
 OBS_NOISE=0.0               # <- set your observation noise here
 EXTRA_OBS_DIMS=0            # Adds extra random noise dimensions to the observation.
 EXTRA_OBS_NOISE_STD=0.0
-FRAME_STACK=3               # Number of frames to stack in the observation
+FRAME_STACK=4               # Number of frames to stack in the observation
 
 # Attention flags
-ATTN_ACT=false
-ATTN_VAL=false
-ATTN_COMMON=true  # Use common attention for both actor and critic
+ATTN_ACT=true
+ATTN_VAL=true
+ATTN_COMMON=false  # Use common attention for both actor and critic
+
+ATTN_DIRECT_OVERRIDE=true  # Use direct override for attention blocks
+
 
 # WANDB logging flag
 USE_WANDB=0  # set to 0 to disable wandb logging
@@ -24,9 +27,15 @@ POLICY="MlpPolicy"
 CONF_FILE="hyperparams/${ENV_NAME}.yml"
 ATTN_TAG=""
 if [ "$ATTN_ACT" = "true" ] || [ "$ATTN_VAL" = "true" ] || [ "$ATTN_COMMON" = "true" ]; then
-    POLICY="SelectiveAttentionPolicy"
-    CONF_FILE="hyperparams/${ENV_NAME}-attn.yml"
-    ATTN_TAG="-attn_act${ATTN_ACT}-attn_val${ATTN_VAL}-attn_common${ATTN_COMMON}"
+    if [ "$ATTN_DIRECT_OVERRIDE" = "true" ]; then
+        POLICY="AttentionDirectOverridePolicy"
+        CONF_FILE="hyperparams/${ENV_NAME}-attn-direct-override.yml"
+        ATTN_TAG="-attn_direct_override${ATTN_DIRECT_OVERRIDE}-attn_val${ATTN_VAL}-attn_common${ATTN_COMMON}"
+    else
+        POLICY="SelectiveAttentionPolicy"
+        CONF_FILE="hyperparams/${ENV_NAME}-attn.yml"
+        ATTN_TAG="-attn_act${ATTN_ACT}-attn_val${ATTN_VAL}-attn_common${ATTN_COMMON}"
+    fi
 fi
 
 # --- Construct arguments for train.py ---

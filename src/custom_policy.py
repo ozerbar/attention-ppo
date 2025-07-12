@@ -1,5 +1,9 @@
 from stable_baselines3.common.policies import ActorCriticPolicy
-from src.custom_extractors import ScalarTokenTransformer, AttnMlpExtractor, AttnExtractor
+from src.custom_extractors import ScalarTokenTransformer, AttnMlpExtractor, AttnExtractor, Attention_Direct_Override_Extractor
+from stable_baselines3.common.torch_layers import FlattenExtractor
+import torch
+import torch.nn as nn
+import gymnasium as gym
 
 
 
@@ -54,3 +58,28 @@ class AttentionPolicy(ActorCriticPolicy):
             use_attn_pi   = self.attn_act,
             use_attn_vf   = self.attn_val,
         )
+
+class AttentionDirectOverridePolicy(ActorCriticPolicy):
+    def __init__(self, *args,
+                 attn_act=False, attn_val=False,
+                 embed_dim=32, num_heads=4, frame_stack=1,
+                 **kwargs):
+
+        super().__init__(*args,
+                         features_extractor_class=FlattenExtractor,
+                         **kwargs)
+
+        self.mlp_extractor = Attention_Direct_Override_Extractor(
+            self.features_dim, attn_act, attn_val, embed_dim, num_heads, frame_stack
+        )
+
+        latent_pi = self.mlp_extractor.latent_dim_pi   # 256
+        latent_vf = self.mlp_extractor.latent_dim_vf
+
+        action_dim = (self.action_space.shape[0] if isinstance(self.action_space, gym.spaces.Box)
+                      else self.action_space.n)
+
+        self.action_net = nn.Linear(latent_pi, action_dim)
+        self.value_net  = nn.Linear(latent_vf, 1)
+
+

@@ -3,6 +3,7 @@ import torch.nn as nn
 from gymnasium import spaces
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, MlpExtractor
 from typing import Tuple
+import torch.nn.functional as F
 
 
 class ScalarTokenAttention(nn.Module):
@@ -153,3 +154,63 @@ class AttnExtractor(nn.Module):
 
     def forward(self, features: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         return self.forward_actor(features), self.forward_critic(features)
+    
+
+
+# ======================================================================================
+
+
+class AttentionBlock_Direct_Override(nn.Module):
+    def __init__(self, seq_len, frame_stack, embed_dim=32, num_heads=4, out_dim=256):
+        super().__init__()
+        self.embed = nn.Linear(1, embed_dim) # Every scalar value (shape (B,S,1)) is mapped to a learned 
+                                            # E-dimensional embedding: (B,S,1) -> (B,S,E)
+        self.frame_pos = nn.Parameter(                      # (frame_stack, embed_dim)
+            torch.randn(frame_stack, embed_dim) * 0.02
+        )
+        self.attn  = nn.MultiheadAttention(embed_dim, num_heads,
+                                        batch_first=True)
+        self.proj  = nn.Linear(seq_len * embed_dim, out_dim)
+        self.frame_stack = frame_stack
+        self.obs_dim = seq_len // frame_stack
+        self.printed = False
+
+    def forward(self, x):
+        B, S = x.shape                                    # x: (B,S)
+        tok = self.embed(x.unsqueeze(-1))                      # (B,S,E)
+        frame_ids = torch.arange(S, device=x.device) // self.obs_dim
+        pos = self.frame_pos[frame_ids]                     # (S,E)
+        tok = tok + pos                                     # broadcast add
+
+        if not self.printed:  # w: (B,H,S,S)
+            y, w = self.attn(tok, tok, tok, need_weights=True, average_attn_weights=False)
+            print(f"[Attention] weight matrix shape: {w.shape}")
+            self.printed = True
+        else:
+            y, _ = self.attn(tok, tok, tok, need_weights=False)
+
+        y = y.flatten(1)                                     # (B,S*E)
+        return F.relu(self.proj(y))                          # (B,256)
+
+class Attention_Direct_Override_Extractor(MlpExtractor):
+    def __init__(self, feat_dim, attn_act, attn_val,
+                 embed_dim=32, num_heads=4, frame_stack=1):
+        super().__init__(feat_dim, net_arch=[], activation_fn=nn.ReLU)
+
+        def _fallback():
+            return nn.Sequential(
+                nn.Linear(feat_dim, 256), nn.ReLU(),
+                nn.Linear(256, 256),      nn.ReLU()
+            )
+
+        self.policy_net = AttentionBlock_Direct_Override(feat_dim, frame_stack, embed_dim, num_heads) \
+                          if attn_act else _fallback()
+        self.value_net  = AttentionBlock_Direct_Override(feat_dim, frame_stack, embed_dim, num_heads) \
+                          if attn_val else _fallback()
+
+        # report the real latent sizes to the parent class
+        self.latent_dim_pi = 256
+        self.latent_dim_vf = 256
+
+    def forward(self, features):
+        return self.policy_net(features), self.value_net(features)

@@ -20,7 +20,7 @@ from src.observation_wrappers import (
     AddGaussianNoise,
     AddExtraObsDims,
 )
-from src.custom_policy import SelectiveAttentionPolicy, AttentionPolicy
+from src.custom_policy import SelectiveAttentionPolicy, AttentionPolicy, AttentionDirectOverridePolicy
 
 # Parse CLI arguments
 parser = argparse.ArgumentParser()
@@ -119,6 +119,12 @@ if POLICY == "SelectiveAttentionPolicy":
         "attn_common": ATTN_COMMON,
     })
 
+if POLICY == "AttentionDirectOverridePolicy":
+    policy_kwargs.update({
+        "attn_act": ATTN_ACT,
+        "attn_val": ATTN_VAL,
+    })
+
 # Construct a descriptive run name
 run_name = (f"{ENV_NAME.lower()}-x{OBS_REPEAT}-seed{SEED}" + (f"-noise{OBS_NOISE}" if OBS_NOISE > 0 else ""))
 
@@ -203,6 +209,7 @@ POLICY_REGISTRY = {
     "MlpPolicy": "MlpPolicy",
     "AttentionPolicy": AttentionPolicy,
     "SelectiveAttentionPolicy": SelectiveAttentionPolicy,
+    "AttentionDirectOverridePolicy": AttentionDirectOverridePolicy,
 }
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = "cpu"

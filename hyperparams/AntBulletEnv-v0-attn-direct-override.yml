@@ -1,5 +1,5 @@
 AntBulletEnv-v0:
-  total_timesteps: 2_500_000
+  n_timesteps: 2_500_000
   normalize_kwargs: >
     dict(norm_obs=True, norm_reward=False)
   batch_size: 128
@@ -14,12 +14,10 @@ AntBulletEnv-v0:
   n_epochs: 20
   n_steps: 512
   normalize: True
-  policy: "src.custom_policy.TransformerPolicy"
+  policy: "MlpPolicy"
   policy_kwargs: >
-    dict(
-      features_extractor_kwargs=dict(embed_dim=64, n_heads=2, n_layers=1, dropout=0.0),
-      net_arch=[dict(pi=[256, 256], vf=[256, 256])]
-    )
+    dict(log_std_init=-1, ortho_init=False, activation_fn=nn.ReLU,
+         net_arch=dict(pi=[256, 256], vf=[256, 256]))
   sde_sample_freq: 4
   use_sde: true
   vf_coef: 0.5
