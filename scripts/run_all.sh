@@ -16,7 +16,7 @@ ATTN_ACT=true
 ATTN_VAL=true
 ATTN_COMMON=false  # Use common attention for both actor and critic
 
-ATTN_DIRECT_OVERRIDE=true  # Use direct override for attention blocks
+ATTN_DIRECT_OVERRIDE=false  # Use direct override for attention blocks
 
 
 # WANDB logging flag
@@ -32,8 +32,8 @@ if [ "$ATTN_ACT" = "true" ] || [ "$ATTN_VAL" = "true" ] || [ "$ATTN_COMMON" = "t
         CONF_FILE="hyperparams/${ENV_NAME}-attn-direct-override.yml"
         ATTN_TAG="-attn_direct_override${ATTN_DIRECT_OVERRIDE}-attn_val${ATTN_VAL}-attn_common${ATTN_COMMON}"
     else
-        POLICY="SelectiveAttentionPolicy"
-        CONF_FILE="hyperparams/${ENV_NAME}-attn.yml"
+        POLICY="MediumAttentionPolicy"
+        CONF_FILE="hyperparams/${ENV_NAME}-attn-direct-override.yml"
         ATTN_TAG="-attn_act${ATTN_ACT}-attn_val${ATTN_VAL}-attn_common${ATTN_COMMON}"
     fi
 fi
@@ -58,7 +58,7 @@ if [ "$ATTN_COMMON" = "true" ]; then
 fi
 
 # --- Set up run directory ---
-BASE_ENV_DIR="runs/${ENV_NAME}/${ENV_NAME}-x${OBS_REPEAT}-obs_noise_${OBS_NOISE}-extra_dims_${EXTRA_OBS_DIMS}-extra_std_${EXTRA_OBS_NOISE_STD}-frames_${FRAME_STACK}${ATTN_TAG}"
+BASE_ENV_DIR="runs/${ENV_NAME}/${ENV_NAME}-x${OBS_REPEAT}-obs_noise_${OBS_NOISE}-extra_dims_${EXTRA_OBS_DIMS}-extra_std_${EXTRA_OBS_NOISE_STD}-frames_${FRAME_STACK}${ATTN_TAG}-policy_${POLICY}"
 mkdir -p "$BASE_ENV_DIR"
 
 # Find next available runN folder
@@ -72,7 +72,7 @@ mkdir -p "$RUN_BATCH_DIR"
 echo "Using run batch directory: $RUN_BATCH_DIR"
 
 # Launch seeds
-for seed in 0 1 2
+for seed in 0
 do
   echo "Launching seed $seed"
   # Pass environment variables and arguments to the training script

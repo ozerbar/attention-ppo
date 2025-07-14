@@ -28,25 +28,7 @@ class ScalarTokenAttention(nn.Module):
         x = self.norm2(x + ff_out)
         return x
     
-class FeatureAttention(nn.Module):
-    """
-    One token  = one observation coordinate.
-    Self-attention is applied across the *feature* axis, not across time.
-    """
-    def __init__(self, obs_dim: int, d_model: int = 64, n_heads: int = 4):
-        super().__init__()
-        self.proj_in  = nn.Linear(1, d_model)          # scalar  → d_model
-        # self.d_model  = d_model
-        self.pos      = nn.Parameter(torch.zeros(1, obs_dim, d_model))
-        self.attn     = nn.MultiheadAttention(d_model, n_heads, batch_first=True)
-        self.proj_out = nn.Linear(d_model, 1)          # d_model → scalar
 
-    def forward(self, x_flat: torch.Tensor) -> torch.Tensor:
-        # x_flat: (B, obs_dim)
-        # h = self.proj_in(x_flat.unsqueeze(-1)) + self.pos      # (B, D, d_model)
-        h = self.proj_in(x_flat.unsqueeze(-1)) + self.pos 
-        h, _ = self.attn(h, h, h)                              # self-attention over D tokens
-        return self.proj_out(h).squeeze(-1)                    # back to (B, obs_dim)
     
 class AttentionLayerBlock(nn.Module):
     def __init__(self, obs_dim: int = 87, d_model: int = 64, n_heads: int = 2):
@@ -102,6 +84,27 @@ class ScalarTokenTransformer(BaseFeaturesExtractor):
 
         return x[:, 0]  # Return [CLS] token output → shape (B, 64)
     
+
+class FeatureAttention(nn.Module):
+    """
+    One token  = one observation coordinate.
+    Self-attention is applied across the *feature* axis, not across time.
+    """
+    def __init__(self, obs_dim: int, d_model: int = 64, n_heads: int = 4):
+        super().__init__()
+        self.proj_in  = nn.Linear(1, d_model)          # scalar  → d_model
+        # self.d_model  = d_model
+        self.pos      = nn.Parameter(torch.zeros(1, obs_dim, d_model))
+        self.attn     = nn.MultiheadAttention(d_model, n_heads, batch_first=True)
+        self.proj_out = nn.Linear(d_model, 1)          # d_model → scalar
+
+    def forward(self, x_flat: torch.Tensor) -> torch.Tensor:
+        # x_flat: (B, obs_dim)
+        # h = self.proj_in(x_flat.unsqueeze(-1)) + self.pos      # (B, D, d_model)
+        h = self.proj_in(x_flat.unsqueeze(-1)) + self.pos 
+        h, _ = self.attn(h, h, h)                              # self-attention over D tokens
+        return self.proj_out(h).squeeze(-1)                    # back to (B, obs_dim)
+
 class AttnMlpExtractor(MlpExtractor):
     def __init__(self, feature_dim: int, *,
                  use_attn_pi: bool, use_attn_vf: bool,use_attn_common: bool,
@@ -214,3 +217,106 @@ class Attention_Direct_Override_Extractor(MlpExtractor):
 
     def forward(self, features):
         return self.policy_net(features), self.value_net(features)
+
+
+
+# ======================================================================================
+
+
+class MediumFeatureAttention(nn.Module):
+    """
+    One token = one observation coordinate.
+    Self-attention is applied across the *feature* axis, not across time.
+    """
+    def __init__(self, obs_dim: int, d_model: int = 128, n_heads: int = 2, attn_output_dim: int = 32):
+        super().__init__()
+        self.proj_in = nn.Linear(1, d_model)  # scalar → d_model
+        self.pos = nn.Parameter(torch.zeros(1, obs_dim, d_model))
+        self.attn = nn.MultiheadAttention(d_model, n_heads, batch_first=True)
+        self.proj_out = nn.Linear(d_model, attn_output_dim)  # d_model → scalar
+        self.attn_output_dim = attn_output_dim
+        self.printed = False
+
+    def forward(self, x_flat: torch.Tensor) -> torch.Tensor:
+        # x_flat: (B, obs_dim)
+        if not self.printed:
+            print(f"Input shape (x_flat): {x_flat.shape}")
+
+        h = self.proj_in(x_flat.unsqueeze(-1)) + self.pos  # (B, obs_dim, d_model)
+        if not self.printed:
+            print(f"Projected input (h): {h.shape}")
+
+        if not self.printed:
+            h_out, w = self.attn(h, h, h, need_weights=True, average_attn_weights=False)
+            print(f"[Attention] weight matrix shape: {w.shape}")
+        else:
+            h_out, _ = self.attn(h, h, h)
+
+        h_out = F.relu(h_out)  # ReLU activation
+
+        # output = self.proj_out(h_out).squeeze(-1)  # (B, obs_dim)
+        output = self.proj_out(h_out) # (B, obs_dim, attn_output_dim)
+
+        if not self.printed:
+            print(f"Output shape after projection: {output.shape}")
+            self.printed = True
+        
+        return output
+
+class MediumAttentionBlock(nn.Module):
+    def __init__(self, feat_dim, embed_dim, num_heads, net_arch, activation_fn, attn_output_dim):
+        super().__init__()
+        self.attn = MediumFeatureAttention(feat_dim, d_model=embed_dim, n_heads=num_heads , attn_output_dim=attn_output_dim)
+        # Build MLP using net_arch specifications
+        # mlp = create_mlp(feat_dim, -1, net_arch, activation_fn)
+        # self.mlp = nn.Sequential(*mlp)
+    
+    def forward(self, x):
+        x = self.attn(x)
+        return x
+        # return self.mlp(x)
+        
+class MediumAttnMlpExtractor(MlpExtractor):
+    def __init__(self, feature_dim, net_arch, activation_fn, device="auto",
+                 attn_act=True, attn_val=False, embed_dim=128, num_heads=2, attn_output_dim=32):
+        super().__init__(feature_dim, net_arch, activation_fn, device)
+        
+        self.feature_dim = feature_dim
+        self.attn_output_dim = attn_output_dim
+        self.attn_act = attn_act
+        self.attn_val = attn_val
+        
+        if isinstance(net_arch, dict):
+            pi_arch = net_arch['pi']
+            vf_arch = net_arch['vf']
+        else:
+            pi_arch = vf_arch = net_arch
+        
+        # Override policy_net and latent dimension if attention is enabled
+        if attn_act:
+            self.policy_net = MediumAttentionBlock(
+                feature_dim, embed_dim, num_heads, pi_arch, activation_fn, attn_output_dim
+            )
+            self.latent_dim_pi = feature_dim * attn_output_dim  # Flattened size
+        
+        # Override value_net and latent dimension if attention is enabled
+        if attn_val:
+            self.value_net = MediumAttentionBlock(
+                feature_dim, embed_dim, num_heads, vf_arch, activation_fn, attn_output_dim
+            )
+            self.latent_dim_vf = feature_dim * attn_output_dim  # Flattened size
+
+    # Add flattening to forward passes
+    def forward_actor(self, features: torch.Tensor) -> torch.Tensor:
+        out = self.policy_net(features)
+        if self.attn_act:
+            # Flatten last two dimensions: [B, obs_dim, attn_out] => [B, obs_dim*attn_out]
+            return out.view(out.shape[0], -1)
+        return out
+
+    def forward_critic(self, features: torch.Tensor) -> torch.Tensor:
+        out = self.value_net(features)
+        if self.attn_val:
+            # Flatten last two dimensions: [B, obs_dim, attn_out] => [B, obs_dim*attn_out]
+            return out.view(out.shape[0], -1)
+        return out
