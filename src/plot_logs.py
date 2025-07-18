@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import re
+from pathlib import Path
 
 # === GLOBAL PLOT CONFIG ===
 sns.set_theme(style="whitegrid")
@@ -24,7 +25,7 @@ plt.rcParams.update({
 
 # LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../", RELATIVE_DIR, "run1/"))
 
-LOG_DIR  = "/home/ozerbar/tum-adlr-01/runs/AntBulletEnv-v0/AntBulletEnv-v0-zoo-repeat32-noise0/run1"
+LOG_DIR  = "/home/damlakonur/tum-adlr-01/AntBulletEnv-v0/AntBulletEnv-v0-zoo-repeat32-noise0/run1/"
 
 
 ANNOTATE_MAX = True  # Whether to annotate the max value on "rollout/ep_rew_mean"
@@ -35,13 +36,23 @@ OUTPUT_DIR = os.path.join(LOG_DIR, "plots")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
-def get_event_file(run_folder):
-    # Search all event files recursively under the run_folder
-    event_files = glob.glob(os.path.join(run_folder, "**", "events.out.tfevents.*"), recursive=True)
-    if event_files:
-        return event_files[0]
-    return None
+def find_event_files(root: str | os.PathLike):
+    """
+    Recursively find all TensorBoard event files under given run1/ folder,
+    grouping by seed0, seed1, seed2. Works with mixed nesting structures.
+    """
+    root = Path(root).expanduser().resolve()
+    pattern = str(root / "seed*" / "**" / "events.out.tfevents.*")
+    candidates = glob.glob(pattern, recursive=True)
 
+    event_files = []
+    for f in candidates:
+        path = Path(f)
+        # Only accept if part of a valid seed folder (seed0, seed1, seed2, etc.)
+        if any(re.match(r"seed[0-9]+$", part) for part in path.parts):
+            event_files.append(str(path))
+
+    return sorted(event_files)
 
 
 def load_scalars(event_file):
@@ -57,7 +68,7 @@ all_tags = set()
 candidate_dirs = [os.path.join(LOG_DIR, d) for d in os.listdir(LOG_DIR) if os.path.isdir(os.path.join(LOG_DIR, d))]
 
 for run_dir in candidate_dirs:
-    event_file = get_event_file(run_dir)
+    event_file = find_event_files(run_dir)
     if not event_file:
         continue
 

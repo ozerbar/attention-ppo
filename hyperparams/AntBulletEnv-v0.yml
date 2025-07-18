@@ -17,7 +17,7 @@ AntBulletEnv-v0:
   policy: "MlpPolicy"
   policy_kwargs: >
     dict(log_std_init=-1, ortho_init=False, activation_fn=nn.ReLU,
-         net_arch=[dict(pi=[256, 256], vf=[256, 256])])
+         net_arch=dict(pi=[256, 256], vf=[256, 256]))
   sde_sample_freq: 4
   use_sde: true
   vf_coef: 0.5
