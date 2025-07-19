@@ -154,6 +154,17 @@ if POLICY == "MediumAttentionPolicy":
         attn_output_dim = 32
     ))
 
+if POLICY == "FrameAttentionPolicy":
+    policy_kwargs.update(dict(
+        attn_act = ATTN_ACT,
+        attn_val = ATTN_VAL,
+        # attn_output_dim = 32, Not used anymore
+        frame_stack=4,
+        d_model=64,
+        mlp_output_dim=32, 
+    ))
+
+
     
 
 # Construct a descriptive run name
@@ -243,7 +254,6 @@ POLICY_REGISTRY = {
     "AttentionDirectOverridePolicy": AttentionDirectOverridePolicy,
     "MediumAttentionPolicy": MediumAttentionPolicy,
     "FrameAttentionPolicy": FrameAttentionPolicy,
-    "MediumAttentionPolicy": MediumAttentionPolicy,
 }
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = "cpu"
