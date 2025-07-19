@@ -27,15 +27,10 @@ POLICY="MlpPolicy"
 CONF_FILE="hyperparams/${ENV_NAME}.yml"
 ATTN_TAG=""
 if [ "$ATTN_ACT" = "true" ] || [ "$ATTN_VAL" = "true" ] || [ "$ATTN_COMMON" = "true" ]; then
-    if [ "$ATTN_DIRECT_OVERRIDE" = "true" ]; then
-        POLICY="AttentionDirectOverridePolicy"
-        CONF_FILE="hyperparams/${ENV_NAME}-attn-direct-override.yml"
-        ATTN_TAG="-attn_direct_override${ATTN_DIRECT_OVERRIDE}-attn_val${ATTN_VAL}-attn_common${ATTN_COMMON}"
-    else
-        POLICY="MediumAttentionPolicy"
-        CONF_FILE="hyperparams/${ENV_NAME}-attn-direct-override.yml"
-        ATTN_TAG="-attn_act${ATTN_ACT}-attn_val${ATTN_VAL}-attn_common${ATTN_COMMON}"
-    fi
+    POLICY="FrameAttentionPolicy"  
+    CONF_FILE="hyperparams/${ENV_NAME}-attn-direct-override.yml"
+    ATTN_TAG="-attn_act${ATTN_ACT}-attn_val${ATTN_VAL}-attn_common${ATTN_COMMON}"
+
 fi
 
 # --- Construct arguments for train.py ---

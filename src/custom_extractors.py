@@ -320,3 +320,122 @@ class MediumAttnMlpExtractor(MlpExtractor):
             # Flatten last two dimensions: [B, obs_dim, attn_out] => [B, obs_dim*attn_out]
             return out.view(out.shape[0], -1)
         return out
+
+# =================================================================================================
+
+
+class FrameAttention(nn.Module):
+    """
+    One token = [framestack * 1 (single observation feature vector)]
+    """
+    def __init__(self, flattened_obs_dim: int, d_model: int = 64, n_heads: int = 2, attn_output_dim: int = 32, frame_stack: int = 4, mlp_output_dim: int = 64):
+        super().__init__()
+        single_obs_dim = flattened_obs_dim // frame_stack  # e.g. flattened_obs_dim=116 / frame_stack=4 = 29
+        self.frame_stack = frame_stack
+        self.single_obs_dim = single_obs_dim
+
+        self.proj_in = nn.Linear(frame_stack, d_model)  # single_obs_dim /(e.g. 29) → d_model
+        self.pos = nn.Parameter(torch.zeros(1, single_obs_dim, frame_stack))
+
+        self.attn = nn.MultiheadAttention(d_model, n_heads, batch_first=True)
+        # self.proj_out = nn.Linear(d_model, attn_output_dim) - Not used anymore, we use MLP after attention
+        self.attn_output_dim = attn_output_dim
+        self.mlp_output_dim = mlp_output_dim
+        self.printed = False
+        self.mlp = nn.Sequential(
+            nn.Linear(single_obs_dim * d_model, mlp_output_dim),
+            nn.ReLU()
+        )
+
+    def forward(self, x_flat: torch.Tensor) -> torch.Tensor:
+        dynamic_batch = x_flat.size(0) 
+        x_flat = x_flat.view(dynamic_batch,self.frame_stack,self.single_obs_dim) # dynamic_batch,4,29
+        x_flat = x_flat.transpose(1, 2)  # Transpose to shape [batch_size, 29, 4]
+        if not self.printed:
+            print(f"Input shape (x_flat): {x_flat.shape}")
+
+        x_flat = x_flat + self.pos
+        h = self.proj_in(x_flat) # [B, FRAMESTACK, d_model]
+
+        if not self.printed:
+            print(f"Projected input (h): {h.shape}")
+            h_out, w = self.attn(h, h, h, need_weights=True, average_attn_weights=False)
+            print(f"[Attention] weight matrix shape: {w.shape}")
+        else:
+            h_out, _ = self.attn(h, h, h)
+
+        h_out = F.relu(h_out)  # ReLU activation
+
+        # Apply MLP after attention output
+        h_out_flat = h_out.reshape(h_out.size(0), -1) 
+        output = self.mlp(h_out_flat)  # Apply MLP (B, 64)
+
+        if not self.printed:
+            print(f"Output shape after projection: {output.shape}")
+            self.printed = True
+        
+        return output
+
+
+class FrameAttentionBlock(nn.Module):
+    def __init__(self, flattened_obs_dim, d_model, num_heads, net_arch, activation_fn, attn_output_dim, frame_stack, mlp_output_dim):
+        super().__init__()
+        self.attn = FrameAttention(flattened_obs_dim=flattened_obs_dim, d_model=d_model, n_heads=num_heads , attn_output_dim=attn_output_dim, frame_stack=frame_stack, mlp_output_dim=mlp_output_dim)
+        # Build MLP using net_arch specifications
+        # mlp = create_mlp(feat_dim, -1, net_arch, activation_fn)
+        # self.mlp = nn.Sequential(*mlp)
+    
+    def forward(self, x):
+        x = self.attn(x) # (B,29,64)
+        return x
+        # return self.mlp(x)
+
+        
+class FrameAttnMlpExtractor(MlpExtractor):
+    def __init__(self, feature_dim, net_arch, activation_fn, device="auto",
+                 attn_act=True, attn_val=False, d_model=64, num_heads=2, attn_output_dim=32, frame_stack=4, mlp_output_dim=64):
+        super().__init__(feature_dim, net_arch, activation_fn, device)
+        
+        self.feature_dim = feature_dim
+        self.attn_output_dim = attn_output_dim
+        self.attn_act = attn_act
+        self.attn_val = attn_val
+        self.frame_stack = frame_stack
+        self.mlp_output_dim = mlp_output_dim
+        
+        if isinstance(net_arch, dict):
+            pi_arch = net_arch['pi']
+            vf_arch = net_arch['vf']
+        else:
+            pi_arch = vf_arch = net_arch
+        
+        # Override policy_net and latent dimension if attention is enabled
+        if attn_act:
+            self.policy_net = FrameAttentionBlock(
+                feature_dim, d_model, num_heads, pi_arch, activation_fn, attn_output_dim, frame_stack, mlp_output_dim
+            )
+            # self.latent_dim_pi = feature_dim * attn_output_dim  # Flattened size
+            self.latent_dim_pi = mlp_output_dim # Flattened size
+        
+        # Override value_net and latent dimension if attention is enabled
+        if attn_val:
+            self.value_net = FrameAttentionBlock(
+                feature_dim, d_model, num_heads, vf_arch, activation_fn, attn_output_dim, frame_stack, mlp_output_dim
+            )
+            # self.latent_dim_vf = feature_dim * attn_output_dim  # Flattened size
+            self.latent_dim_vf = mlp_output_dim
+
+    # Add flattening to forward passes
+    def forward_actor(self, features: torch.Tensor) -> torch.Tensor:
+        out = self.policy_net(features)
+        if self.attn_act:
+            # Flatten last two dimensions: [B, obs_dim, attn_out] => [B, obs_dim*attn_out]
+            return out.view(out.shape[0], -1)
+        return out
+
+    def forward_critic(self, features: torch.Tensor) -> torch.Tensor:
+        out = self.value_net(features)
+        if self.attn_val:
+            # Flatten last two dimensions: [B, obs_dim, attn_out] => [B, obs_dim*attn_out]
+            return out.view(out.shape[0], -1)
+        return out

@@ -1,5 +1,5 @@
 from stable_baselines3.common.policies import ActorCriticPolicy
-from src.custom_extractors import ScalarTokenTransformer, AttnMlpExtractor, AttnExtractor, Attention_Direct_Override_Extractor, MediumAttnMlpExtractor
+from src.custom_extractors import ScalarTokenTransformer, AttnMlpExtractor, AttnExtractor, Attention_Direct_Override_Extractor, MediumAttnMlpExtractor, FrameAttnMlpExtractor
 from stable_baselines3.common.torch_layers import FlattenExtractor
 import torch
 import torch.nn as nn
@@ -100,4 +100,31 @@ class MediumAttentionPolicy(ActorCriticPolicy):
             activation_fn = self.activation_fn,
             device        = self.device,
             attn_output_dim    = self.attn_output_dim,
+        )
+
+
+
+class FrameAttentionPolicy(ActorCriticPolicy):
+    def __init__(self, *args, **kwargs):
+        self.attn_act = kwargs.pop("attn_act", True)
+        self.attn_val = kwargs.pop("attn_val", False)
+        self.attn_output_dim = kwargs.pop("attn_output_dim", 32)
+        self.frame_stack = kwargs.pop("frame_stack", 4)
+        self.d_model = kwargs.pop("d_model", 64)
+        self.mlp_output_dim = kwargs.pop("mlp_output_dim", 64)
+        super().__init__(*args, **kwargs)
+
+    def _build_mlp_extractor(self) -> None:
+        self.mlp_extractor = FrameAttnMlpExtractor(
+            feature_dim   = self.features_dim,
+            attn_act   = self.attn_act,
+            attn_val   = self.attn_val,
+            net_arch      = self.net_arch,
+            activation_fn = self.activation_fn,
+            device        = self.device,
+            attn_output_dim    = self.attn_output_dim,
+            d_model        = self.d_model,
+            frame_stack   = self.frame_stack,
+            mlp_output_dim = self.mlp_output_dim
+
         )
