@@ -414,7 +414,8 @@ class FrameAttention(nn.Module):
         self.single_obs_dim = single_obs_dim
 
         self.proj_in = nn.Linear(frame_stack, d_model)  # single_obs_dim /(e.g. 29) → d_model
-        self.pos = nn.Parameter(torch.zeros(1, single_obs_dim, frame_stack))
+        # self.pos = nn.Parameter(torch.zeros(1, single_obs_dim, frame_stack))
+        self.pos = nn.Parameter(torch.randn(1, single_obs_dim, frame_stack) * 1e-4)
 
         self.attn = nn.MultiheadAttention(d_model, n_heads, batch_first=True)
         # self.proj_out = nn.Linear(d_model, attn_output_dim) - Not used anymore, we use MLP after attention
