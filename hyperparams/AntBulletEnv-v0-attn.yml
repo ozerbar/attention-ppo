@@ -17,8 +17,10 @@ AntBulletEnv-v0:
   policy: "src.custom_policy.TransformerPolicy"
   policy_kwargs: >
     dict(
-      features_extractor_kwargs=dict(embed_dim=64, n_heads=2, n_layers=1, dropout=0.0),
-      net_arch=[dict(pi=[256, 256], vf=[256, 256])]
+      net_arch=dict(pi=[], vf=[]),
+      activation_fn=nn.ReLU,
+      attn_act=True,
+      attn_val=False
     )
   sde_sample_freq: 4
   use_sde: true

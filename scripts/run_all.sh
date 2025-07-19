@@ -10,6 +10,7 @@ OBS_NOISE=0.0               # <- set your observation noise here
 EXTRA_OBS_DIMS=0            # Adds extra random noise dimensions to the observation.
 EXTRA_OBS_NOISE_STD=0.0
 FRAME_STACK=4               # Number of frames to stack in the observation
+FRAME_STACK=4               # Number of frames to stack in the observation
 
 # Attention flags
 ATTN_ACT=true

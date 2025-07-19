@@ -1,23 +1,19 @@
-AntBulletEnv-v0:
-  n_timesteps: 2_000_000
+LunarLanderContinuous-v3:
+  n_timesteps: 1_000_000
   normalize_kwargs: >
     dict(norm_obs=True, norm_reward=False)
-  batch_size: 128
-  clip_range: 0.4
-  ent_coef: 0.0
+  batch_size: 64
+  ent_coef: 0.01
   env_wrapper: sb3_contrib.common.wrappers.TimeFeatureWrapper
-  gae_lambda: 0.9
-  gamma: 0.99
+  gae_lambda: 0.98
+  gamma: 0.999
   learning_rate: 3e-05
   max_grad_norm: 0.5
   n_envs: 16
-  n_epochs: 20
-  n_steps: 512
-  normalize: True
+  n_epochs: 4
+  n_steps: 1024
+  normalize: False
   policy: "MlpPolicy"
   policy_kwargs: >
     dict(log_std_init=-1, ortho_init=False, activation_fn=nn.ReLU,
          net_arch=dict(pi=[256, 256], vf=[256, 256]))
-  sde_sample_freq: 4
-  use_sde: true
-  vf_coef: 0.5

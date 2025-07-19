@@ -1,30 +1,23 @@
 #!/usr/bin/env python3
 """
-plot_seed0_ep_rew_mean.py
+plot_ep_rew_mean_all_seeds.py
 
 Plots the episode‑mean reward (TensorBoard tag: ``rollout/ep_rew_mean``)
-for *seed 0* runs coming from **multiple experiment folders** and overlays
-all curves in a single figure.
+for all seed runs in each experiment folder and overlays all curves per group
+in a single color.
 
----
-Usage
------
-1. Fill the ``RUN_PATHS`` dictionary with <legend‑label>: <path‑to‑folder>
-   pairs.  Each *path* can point either directly to a ``seed0`` run folder
-   or any ancestor directory that contains it.
-2. Optionally tweak ``ANNOTATE_MAX`` or the global Matplotlib style.
-3. Run the script: ``python plot_seed0_ep_rew_mean.py``. A PNG called
-   ``seed0_ep_rew_mean.png`` will be written next to the script.
+Each group (e.g. "obsx4") aggregates runs like seed0, seed1, seed2.
 
 Requirements: ``tensorboard``, ``pandas``, ``matplotlib``, ``seaborn``.
 """
+
 from __future__ import annotations
 
 import os
-import re
 import glob
+import re
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -33,31 +26,20 @@ from tensorboard.backend.event_processing import event_accumulator
 
 
 # ───────────────────────── USER INPUT ──────────────────────────
-# Map <legend label> ▶ <folder‑path>. Add as many as you like.
 RUN_PATHS: Dict[str, str] = {
-    "obsx1": "/home/ozerbar/tum-adlr-01/runs/AntBulletEnv-v0/AntBulletEnv-v0-x1-obs_noise_0.0-extra_dims_0-extra_std_0.0/run1/",
-    "obsx4": "/home/ozerbar/tum-adlr-01/runs/AntBulletEnv-v0/AntBulletEnv-v0-zoo-repeat4-noise0/run1/",
-    "obsx16": "/home/ozerbar/tum-adlr-01/runs/AntBulletEnv-v0/AntBulletEnv-v0-zoo-repeat16-noise0/run1/",
-    "obsx32": "/home/ozerbar/tum-adlr-01/runs/AntBulletEnv-v0/AntBulletEnv-v0-zoo-repeat32-noise0/run1/",
-    "10 noise dim, std=0.5": "/home/ozerbar/tum-adlr-01/runs/AntBulletEnv-v0/AntBulletEnv-v0-x1-obs_noise_0.0-extra_dims_10-extra_std_0.5/run1",
-    "20 noise dim, std=1.0": "/home/ozerbar/tum-adlr-01/runs/AntBulletEnv-v0/AntBulletEnv-v0-x1-obs_noise_0.0-extra_dims_20-extra_std_1.0/run1",
-    "40 noise dim, std=0.5": "/home/ozerbar/tum-adlr-01/runs/AntBulletEnv-v0/AntBulletEnv-v0-x1-obs_noise_0.0-extra_dims_40-extra_std_0.5/run1",
-    "40 noise dim, std=1.0": "/home/ozerbar/tum-adlr-01/runs/AntBulletEnv-v0/AntBulletEnv-v0-x1-obs_noise_0.0-extra_dims_40-extra_std_1.0/run1",
-    "80 noise dim, std=2.0": "/home/ozerbar/tum-adlr-01/runs/AntBulletEnv-v0/AntBulletEnv-v0-x1-obs_noise_0.0-extra_dims_80-extra_std_2.0/run1",
-
-
+    "obsx1": "/home/damlakonur/tum-adlr-01/runs/Pusher-v5/obsx1/",
+    "obsx2": "/home/damlakonur/tum-adlr-01/runs/Pusher-v5/obsx2/",
+    "obsx4": "/home/damlakonur/tum-adlr-01/runs/Pusher-v5/obsx4/",
+    "obsx16": "/home/damlakonur/tum-adlr-01/runs/Pusher-v5/obsx16/",
 }
 
-TAG: str = "rollout/ep_rew_mean"  # TensorBoard scalar to plot.
-OUTPUT_FILE: str = "seed0_ep_rew_mean.png"  # Output figure filename.
-ANNOTATE_MAX: bool = True  # Draw a dashed line and text at global max.
+TAG: str = "rollout/ep_rew_mean"
+ANNOTATE_MAX: bool = True
+SAVE_DIR: str = "/home/damlakonur/tum-adlr-01/figures"
+OUTPUT_FILE: str = os.path.join(SAVE_DIR, "ep_rew_mean_all_seeds.png")
 
-
-SAVE_DIR: str = "/home/ozerbar/tum-adlr-01/figures"  # <-- your desired directory
-OUTPUT_FILE: str = os.path.join(SAVE_DIR, "seed0_ep_rew_mean.png")
 # ───────────────────────────────────────────────────────────────
 
-# 🔧 Global plot appearance
 sns.set_theme(style="whitegrid")
 plt.rcParams.update({
     "font.size": 14,
@@ -69,36 +51,49 @@ plt.rcParams.update({
 })
 
 
-def _find_event_file(root: str | os.PathLike) -> str | None:
-    """Return the *first* TensorBoard event file inside *root*.
-
-    Preference order:
-        1. Any file that lives inside a directory whose name ends with
-           ``seed0`` or ``seed_0`` or ``seed-0``.
-        2. Otherwise the first event file found during the recursive scan.
+def find_event_files(root: str | os.PathLike) -> List[str]:
+    """
+    Recursively find all TensorBoard event files under given run1/ folder,
+    grouping by seed0, seed1, seed2. Works with mixed nesting structures.
     """
     root = Path(root).expanduser().resolve()
-
-    # Allow users to pass the event file path directly → no search needed.
-    if root.is_file() and root.name.startswith("events.out.tfevents"):
-        return str(root)
-
-    # Recursively collect all event files under *root*.
-    pattern = str(root / "**" / "events.out.tfevents.*")
+    pattern = str(root / "seed*" / "**" / "events.out.tfevents.*")
     candidates = glob.glob(pattern, recursive=True)
-    if not candidates:
-        return None
 
-    # Prefer those whose *parent* dir name advertises seed 0.
-    seed0_regex = re.compile(r"seed[-_]?0$")
-    seed0_files = [f for f in candidates if seed0_regex.search(Path(f).parent.name)]
-    return (seed0_files or candidates)[0]  # first match is fine.
+    event_files = []
+    for f in candidates:
+        path = Path(f)
+        # Only accept if part of a valid seed folder (seed0, seed1, seed2, etc.)
+        if any(re.match(r"seed[0-9]+$", part) for part in path.parts):
+            event_files.append(str(path))
 
+    return sorted(event_files)
 
-def _load_scalar_df(event_file: str, tag: str) -> pd.DataFrame:
+def find_event_files2(root: str | os.PathLike) -> List[str]:
+    """
+    Recursively find all TensorBoard event files under seed*/**/ folders inside a given run1/.
+    Works with structures like:
+      - seed0/ppo/.../tb_logs/
+      - seed0/runs/.../
+      - seed0/tensorboard/.../
+    """
+    root = Path(root).expanduser().resolve()
+    pattern = str(root / "**" / "events.out.tfevents.*")
+    all_event_files = glob.glob(pattern, recursive=True)
+
+    # Keep only those under a path segment matching seed0, seed1, ...
+    seed_event_files = []
+    for f in all_event_files:
+        parts = Path(f).parts
+        if any(re.fullmatch(r"seed\d+", p) for p in parts):
+            seed_event_files.append(str(f))
+
+    return sorted(seed_event_files)
+
+def load_scalar_df(event_file: str, tag: str) -> pd.DataFrame:
     """Load *tag* from *event_file* → DataFrame(step, value)."""
     ea = event_accumulator.EventAccumulator(event_file)
-    ea.Reload()  # parse the file
+    ea.Reload()
     if tag not in ea.Tags().get("scalars", []):
         return pd.DataFrame()
     events = ea.Scalars(tag)
@@ -116,39 +111,59 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(figsize=(10, 5))
     all_values = []
 
-    for label, path in RUN_PATHS.items():
-        event_file = _find_event_file(path)
-        if event_file is None:
-            print(f"[!] No TensorBoard file found for '{label}' under '{path}'. Skipping.")
+    # Generate consistent color palette for all experiments
+    palette = sns.color_palette("Accent", n_colors=len(RUN_PATHS)+6)
+
+    for i, (label, root_path) in enumerate(RUN_PATHS.items()):
+        event_files = find_event_files2(root_path)
+        if not event_files:
+            print(f"[!] No event files found under {root_path}")
             continue
 
-        df = _load_scalar_df(event_file, TAG)
-        if df.empty:
-            print(f"[!] Tag '{TAG}' missing in '{event_file}'. Skipping.")
+        dfs = []
+        for event_file in event_files:
+            df = load_scalar_df(event_file, TAG)
+            if df.empty:
+                print(f"[!] No data for tag '{TAG}' in {event_file}")
+                continue
+
+            seed_name = Path(event_file).parts[
+                list(Path(event_file).parts).index("run1") + 1
+            ]  # e.g. seed0, seed1, seed2
+
+            df["run"] = seed_name
+            dfs.append(df)
+            all_values.extend(df["value"].tolist())
+
+        if not dfs:
             continue
 
-        sns.lineplot(
-            data=df, x="step", y="value",
-            ax=ax, estimator=None, label=label,
-        )
-        all_values.extend(df["value"].tolist())
-        print(f"[✓] Added '{label}' from {event_file}")
+        combined_df = pd.concat(dfs)
+        color = palette[i+2]
+        first = True  # flag to add only one legend entry per group
 
-    # Aesthetics
-    ax.set_title("Episode Mean Reward (seed 0)")
+        for run_name, run_df in combined_df.groupby("run"):
+            sns.lineplot(
+                data=run_df, x="step", y="value",
+                label=label if first else None,  # only first seed gets a label
+                ax=ax, color=color, linewidth=1.3
+            )
+            first = False  # disable after first
+
+        print(f"[✓] Plotted {len(dfs)} runs for '{label}'")
+
+    ax.set_title("Episode Mean Reward (All Seeds)")
     ax.set_xlabel("Timesteps")
     ax.set_ylabel("Mean Reward")
     ax.legend(frameon=False, loc="best")
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
-    # Dynamic y‑limits with a bit of head‑room.
     if all_values:
         ymin, ymax = min(all_values), max(all_values)
         padding = 0.1 * (ymax - ymin) if ymax > ymin else 1.0
         ax.set_ylim(ymin - padding, ymax + padding)
 
-    # Annotate global maximum (across all runs)
     if ANNOTATE_MAX and all_values:
         global_max = max(all_values)
         ax.axhline(global_max, linestyle="--", linewidth=1.5)
@@ -161,8 +176,4 @@ if __name__ == "__main__":
     os.makedirs(SAVE_DIR, exist_ok=True)
     plt.tight_layout()
     plt.savefig(OUTPUT_FILE, dpi=150)
-    print(f"\n[✓] Figure {OUTPUT_FILE} saved to {SAVE_DIR}\n")
-
-    # plt.tight_layout()
-    # plt.savefig(OUTPUT_FILE, dpi=150)
-    # print(f"\n[✓] Figure saved to {OUTPUT_FILE}\n")
+    print(f"\n[✓] Figure saved to {OUTPUT_FILE}\n")

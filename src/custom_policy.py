@@ -56,6 +56,8 @@ class AttentionPolicy(ActorCriticPolicy):
             activation_fn = self.activation_fn,
             device        = self.device,
             use_attn_pi   = self.attn_act,
+            num_frames    = 4,
+            d_model       = 64,
             use_attn_vf   = self.attn_val,
         )
 
