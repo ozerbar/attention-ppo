@@ -1,5 +1,5 @@
 AntBulletEnv-v0:
-  n_timesteps: 2_500_000
+  n_timesteps: 4_000_000
   normalize_kwargs: >
     dict(norm_obs=True, norm_reward=False)
   batch_size: 128

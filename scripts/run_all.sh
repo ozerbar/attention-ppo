@@ -7,9 +7,9 @@ mkdir -p runs
 ENV_NAME="AntBulletEnv-v0"  # <- set your environment name here
 OBS_REPEAT=1                # <- set your observation repeat here
 OBS_NOISE=0.0               # <- set your observation noise here
-EXTRA_OBS_DIMS=0            # Adds extra random noise dimensions to the observation.
+EXTRA_OBS_DIMS=40            # Adds extra random noise dimensions to the observation.
 EXTRA_OBS_NOISE_STD=0.0
-FRAME_STACK=4               # Number of frames to stack in the observation
+EXTRA_OBS_TYPE="linear"
 FRAME_STACK=4               # Number of frames to stack in the observation
 
 # Attention flags
@@ -38,6 +38,7 @@ fi
 set -- --obs_repeat "$OBS_REPEAT" \
     --obs_noise "$OBS_NOISE" \
     --frame_stack "$FRAME_STACK" \
+    --extra_obs_type "$EXTRA_OBS_TYPE" \
     --extra_obs_dims "$EXTRA_OBS_DIMS" \
     --extra_obs_noise_std "$EXTRA_OBS_NOISE_STD" \
     --policy "$POLICY" \
@@ -54,7 +55,7 @@ if [ "$ATTN_COMMON" = "true" ]; then
 fi
 
 # --- Set up run directory ---
-BASE_ENV_DIR="runs/${ENV_NAME}/${ENV_NAME}-x${OBS_REPEAT}-obs_noise_${OBS_NOISE}-extra_dims_${EXTRA_OBS_DIMS}-extra_std_${EXTRA_OBS_NOISE_STD}-frames_${FRAME_STACK}${ATTN_TAG}-policy_${POLICY}"
+BASE_ENV_DIR="runs/${ENV_NAME}/${ENV_NAME}-x${OBS_REPEAT}-obs_noise_${OBS_NOISE}-extra_obs_type_${EXTRA_OBS_TYPE}-extra_dims_${EXTRA_OBS_DIMS}-extra_std_${EXTRA_OBS_NOISE_STD}-frames_${FRAME_STACK}${ATTN_TAG}-policy_${POLICY}"
 mkdir -p "$BASE_ENV_DIR"
 
 # Find next available runN folder

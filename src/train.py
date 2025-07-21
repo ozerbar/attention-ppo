@@ -19,6 +19,7 @@ from src.observation_wrappers import (
     ObservationRepeater,
     AddGaussianNoise,
     AddExtraObsDims,
+    AddExtraObsDimsRamp,
 )
 from src.custom_policy import SelectiveAttentionPolicy, AttentionPolicy, AttentionDirectOverridePolicy, MediumAttentionPolicy, FrameAttentionPolicy
 
@@ -27,6 +28,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--seed", type=int, required=True, help="Random seed for reproducibility")
 parser.add_argument("--obs_repeat", type=int, default=1, help="Observation repetition factor")
 parser.add_argument("--obs_noise", type=float, default=0.0, help="Std dev of Gaussian noise added to observations")
+parser.add_argument("--extra_obs_type", type=str, default="linear", help="Type of extra observation noise: 'linear' or 'periodic'")
 parser.add_argument("--extra_obs_dims", type=int, default=0, help="Number of extra random noise dims to add to observation")
 parser.add_argument("--extra_obs_noise_std", type=float, default=0.0, help="Stddev of extra random noise dims")
 parser.add_argument("--frame_stack", type=int, default=1, help="Number of frames to stack across time")
@@ -40,6 +42,7 @@ args = parser.parse_args()
 SEED = args.seed
 OBS_REPEAT = args.obs_repeat
 OBS_NOISE = args.obs_noise
+EXTRA_OBS_TYPE = args.extra_obs_type
 EXTRA_OBS_DIMS = args.extra_obs_dims
 EXTRA_OBS_NOISE_STD = args.extra_obs_noise_std
 FRAME_STACK = args.frame_stack
@@ -51,6 +54,8 @@ CONF_FILE = args.conf_file
 ENV_NAME = os.environ.get("ENV_NAME")
 RUN_BATCH_DIR = os.environ.get("RUN_BATCH_DIR")
 assert ENV_NAME is not None and RUN_BATCH_DIR is not None, "ENV_NAME and RUN_BATCH_DIR must be set!"
+
+print(f"[DEBUG] EXTRA_OBS_TYPE = {EXTRA_OBS_TYPE}")
 
 RUN_DIR = os.path.join(RUN_BATCH_DIR, f"seed{SEED}")
 os.makedirs(RUN_DIR, exist_ok=True)
@@ -238,9 +243,19 @@ if OBS_NOISE > 0:
 
 # -------- add extra (unnormalised) noise dimensions ---------------------
 if EXTRA_OBS_DIMS > 0:
-    env = AddExtraObsDims(vec_norm,
-                          extra_dims=EXTRA_OBS_DIMS,
-                          std=EXTRA_OBS_NOISE_STD)
+    if EXTRA_OBS_TYPE == "gaussian":
+        env = AddExtraObsDims(vec_norm,
+                            extra_dims=EXTRA_OBS_DIMS,
+                            std=EXTRA_OBS_NOISE_STD)
+    elif EXTRA_OBS_TYPE == "linear":
+        env = AddExtraObsDimsRamp(
+            vec_norm,
+            extra_dims = EXTRA_OBS_DIMS,          # 29 → 39 dims
+            noise_type = EXTRA_OBS_TYPE,    # or "periodic"
+            scale      = 0.1,         # slope
+            period     = 50,          # only for "periodic"
+            amplitude  = 2.0          # only for "periodic"
+)
 else:
     env = vec_norm
 
@@ -363,6 +378,7 @@ env_stack = {
     "parameters": {
         "obs_repeat": OBS_REPEAT,
         "obs_noise": OBS_NOISE,
+        "extra_obs_type": EXTRA_OBS_TYPE,
         "extra_obs_dims": EXTRA_OBS_DIMS,
         "extra_obs_noise_std": EXTRA_OBS_NOISE_STD,
         "env_wrapper": env_wrapper_path,

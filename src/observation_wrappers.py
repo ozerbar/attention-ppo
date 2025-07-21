@@ -161,3 +161,114 @@ class AddExtraObsDims(VecEnvWrapper):
         obs   = self._append(obs)
         infos = self._patch_infos(infos)
         return obs, rews, dones, infos
+
+
+
+class AddExtraObsDimsRamp(VecEnvWrapper):
+    """
+    Append `extra_dims` deterministic features to every observation.
+
+    Parameters
+    ----------
+    extra_dims : int
+        Number of nuisance dimensions appended.
+    noise_type : {"linear", "periodic", "constant"}
+        * linear   – ramp:  j * step * scale
+        * periodic – sine wave: amplitude · sin(2π step/period + phase_j)
+        * constant – fixed scalar `scale`
+    scale : float
+        Slope for "linear" and value for "constant".
+    period : float
+        Period (in **env steps**) for "periodic".
+    amplitude : float
+        Amplitude for "periodic".
+    """
+
+    def __init__(
+        self,
+        venv,
+        extra_dims: int,
+        noise_type: str = "linear",
+        scale: float = 0.1,
+        period: float = 10.0,
+        amplitude: float = 1.0,
+    ):
+        super().__init__(venv)
+        self.extra_dims = int(extra_dims)
+        self.noise_type = noise_type.lower()
+        self.scale      = float(scale)
+        self.period     = float(period)
+        self.amplitude  = float(amplitude)
+
+        # Extend observation space (keep dtype consistent with wrapped env)
+        low  = np.concatenate(
+            [venv.observation_space.low,
+             np.full(self.extra_dims, -np.inf, dtype=venv.observation_space.dtype)]
+        )
+        high = np.concatenate(
+            [venv.observation_space.high,
+             np.full(self.extra_dims,  np.inf, dtype=venv.observation_space.dtype)]
+        )
+        self.observation_space = gym.spaces.Box(low=low, high=high,
+                                                dtype=venv.observation_space.dtype)
+
+        # one counter per parallel environment
+        self.step_counters = np.zeros(self.num_envs, dtype=np.int64)
+
+        # Pre-compute constants used by the noise generators
+        self._dim_indices = np.arange(1, self.extra_dims + 1, dtype=np.float32)
+        self._phases      = np.linspace(0, 2*np.pi, self.extra_dims,
+                                        endpoint=False, dtype=np.float32)
+
+    # ---------------------------------------------------------------- helpers
+    def _generate_noise(self, steps: np.ndarray) -> np.ndarray:
+        """Return (n_envs, extra_dims) deterministic “noise” for given steps."""
+        steps = steps.astype(np.float32)[:, None]             # (n_envs, 1)
+
+        if self.noise_type == "linear":
+            return steps * self._dim_indices * self.scale     # ramp
+
+        if self.noise_type == "periodic":
+            angle = 2 * np.pi * steps / self.period + self._phases
+            return self.amplitude * np.sin(angle)
+
+        if self.noise_type == "constant":
+            return np.full((len(steps), self.extra_dims), self.scale,
+                           dtype=np.float32)
+
+        raise ValueError(f"Unknown noise_type '{self.noise_type}'")
+
+    # ------------------------------------------------------------- VecEnv API
+    def reset(self, **kwargs):
+        self.step_counters.fill(0)
+        obs = self.venv.reset(**kwargs)
+        noise = self._generate_noise(self.step_counters)
+        return np.concatenate([obs, noise.astype(obs.dtype)], axis=-1)
+
+    def step_async(self, actions):
+        self.venv.step_async(actions)
+
+    def step_wait(self):
+        obs, rews, dones, infos = self.venv.step_wait()
+
+        # Generate noise based on current counters *before* incrementing
+        noise = self._generate_noise(self.step_counters)
+        augmented_obs = np.concatenate([obs, noise.astype(obs.dtype)], axis=-1)
+
+        # Patch terminal/final observations
+        for env_idx, done in enumerate(dones):
+            if not done:
+                continue
+            for key in ("terminal_observation", "final_observation"):
+                if key in infos[env_idx]:
+                    term_noise = self._generate_noise(
+                        np.array([self.step_counters[env_idx]])
+                    )[0]
+                    infos[env_idx][key] = np.concatenate(
+                        [infos[env_idx][key], term_noise.astype(obs.dtype)]
+                    )
+
+        # Update counters: +1 for ongoing envs, 0 for those that just ended
+        self.step_counters = np.where(dones, 0, self.step_counters + 1)
+
+        return augmented_obs, rews, dones, infos
