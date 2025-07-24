@@ -137,28 +137,6 @@ if POLICY == "MediumAttentionPolicy":
         attn_output_dim = 32
     ))
 
-    
-
-if POLICY == "SelectiveAttentionPolicy":
-    policy_kwargs.update({
-        "attn_act": ATTN_ACT,
-        "attn_val": ATTN_VAL,
-        "attn_common": ATTN_COMMON,
-    })
-
-if POLICY == "AttentionDirectOverridePolicy":
-    policy_kwargs.update({
-        "attn_act": ATTN_ACT,
-        "attn_val": ATTN_VAL,
-    })
-
-if POLICY == "MediumAttentionPolicy":
-    policy_kwargs.update(dict(
-        attn_act = ATTN_ACT,
-        attn_val = ATTN_VAL,
-        attn_output_dim = 32
-    ))
-
 if POLICY == "FrameAttentionPolicy":
     policy_kwargs.update(dict(
         attn_act = ATTN_ACT,
@@ -252,7 +230,7 @@ if EXTRA_OBS_DIMS > 0:
             vec_norm,
             extra_dims = EXTRA_OBS_DIMS,          # 29 → 39 dims
             noise_type = EXTRA_OBS_TYPE,    # or "periodic"
-            scale      = 0.1,         # slope
+            scale      = 0.001,         # slope
             period     = 50,          # only for "periodic"
             amplitude  = 2.0          # only for "periodic"
 )
