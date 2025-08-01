@@ -5,6 +5,7 @@ src/wandb
 /.vscode
 *.json
 /artifacts
+*.mp4
 
 *.zip
 

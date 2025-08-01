@@ -142,28 +142,6 @@ if POLICY == "MediumAttentionPolicy":
         attn_output_dim = 32
     ))
 
-    
-
-if POLICY == "SelectiveAttentionPolicy":
-    policy_kwargs.update({
-        "attn_act": ATTN_ACT,
-        "attn_val": ATTN_VAL,
-        "attn_common": ATTN_COMMON,
-    })
-
-if POLICY == "AttentionDirectOverridePolicy":
-    policy_kwargs.update({
-        "attn_act": ATTN_ACT,
-        "attn_val": ATTN_VAL,
-    })
-
-if POLICY == "MediumAttentionPolicy":
-    policy_kwargs.update(dict(
-        attn_act = ATTN_ACT,
-        attn_val = ATTN_VAL,
-        attn_output_dim = 32
-    ))
-
 if POLICY == "FrameAttentionPolicy":
     policy_kwargs.update(dict(
         attn_act = ATTN_ACT,
