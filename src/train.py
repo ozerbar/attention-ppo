@@ -20,6 +20,7 @@ from src.observation_wrappers import (
     AddGaussianNoise,
     AddExtraObsDims,
     AddExtraObsDimsRamp,
+    AddExtraObsDimsUniform,
 )
 from src.custom_policy import SelectiveAttentionPolicy, AttentionPolicy, AttentionDirectOverridePolicy, MediumAttentionPolicy, FrameAttentionPolicy
 
@@ -31,6 +32,8 @@ parser.add_argument("--obs_noise", type=float, default=0.0, help="Std dev of Gau
 parser.add_argument("--extra_obs_type", type=str, default="linear", help="Type of extra observation noise: 'linear' or 'periodic'")
 parser.add_argument("--extra_obs_dims", type=int, default=0, help="Number of extra random noise dims to add to observation")
 parser.add_argument("--extra_obs_noise_std", type=float, default=0.0, help="Stddev of extra random noise dims")
+parser.add_argument("--mu_low", type=float, default=-1.0, help="Lower bound for the uniform distribution for mu sampling")
+parser.add_argument("--mu_high", type=float, default=1.0, help="Upper bound for the uniform distribution for mu sampling")
 parser.add_argument("--frame_stack", type=int, default=1, help="Number of frames to stack across time")
 parser.add_argument("--conf-file", type=str, default=None, help="Path to the hyperparameter file")
 parser.add_argument("--policy", type=str, default="MlpPolicy", help="Policy to use. E.g. MlpPolicy, SelectiveAttentionPolicy")
@@ -44,6 +47,8 @@ OBS_REPEAT = args.obs_repeat
 OBS_NOISE = args.obs_noise
 EXTRA_OBS_TYPE = args.extra_obs_type
 EXTRA_OBS_DIMS = args.extra_obs_dims
+MU_LOW = args.mu_low
+MU_HIGH = args.mu_high
 EXTRA_OBS_NOISE_STD = args.extra_obs_noise_std
 FRAME_STACK = args.frame_stack
 POLICY = args.policy
@@ -252,10 +257,18 @@ if EXTRA_OBS_DIMS > 0:
             vec_norm,
             extra_dims = EXTRA_OBS_DIMS,          # 29 → 39 dims
             noise_type = EXTRA_OBS_TYPE,    # or "periodic"
-            scale      = 0.1,         # slope
+            scale      = 0.001,         # slope
             period     = 50,          # only for "periodic"
             amplitude  = 2.0          # only for "periodic"
-)
+        )
+    elif EXTRA_OBS_TYPE == "uniform":  # Add the new selection for uniform noise
+        env = AddExtraObsDimsUniform(
+            vec_norm,
+            extra_dims=EXTRA_OBS_DIMS,
+            low=MU_LOW,  # Lower bound for uniform noise
+            high=MU_HIGH,  # Upper bound for uniform noise
+        )
+
 else:
     env = vec_norm
 

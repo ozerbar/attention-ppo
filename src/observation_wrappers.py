@@ -164,6 +164,91 @@ class AddExtraObsDims(VecEnvWrapper):
 
 
 
+class AddExtraObsDimsUniform(VecEnvWrapper):
+    """
+    Append `extra_dims` i.i.d. U(low, high) features to every observation.
+
+    ▸ It is meant to be placed **after** VecNormalize so the new features are
+      *not* normalised.
+
+    ▸ The wrapper updates:
+        • observations returned by `reset()` and `step_wait()`
+        • `info["terminal_observation"]` / `info["final_observation"]`
+          (needed by SB-3’s on-policy collectors)
+    """
+
+    def __init__(
+        self,
+        venv,
+        extra_dims: int,
+        low: float = -10.0,
+        high: float = 10.0,
+        seed: int | None = None,
+    ):
+        super().__init__(venv)
+        self.extra_dims = int(extra_dims)
+        self.low = float(low)
+        self.high = float(high)
+        self.rng = np.random.default_rng(seed)
+        self.mu = self.rng.uniform(self.low, self.high, self.extra_dims)
+
+        # ------------------------------------------------------------------
+        # Extend the observation space with ±∞ bounds so SB-3 will not clip
+        # ------------------------------------------------------------------
+        low  = np.concatenate(
+            [venv.observation_space.low,
+             np.full(self.extra_dims, -np.inf)]
+        )
+        high = np.concatenate(
+            [venv.observation_space.high,
+             np.full(self.extra_dims,  np.inf)]
+        )
+        self.observation_space = gym.spaces.Box(low=low, high=high,
+                                                dtype=venv.observation_space.dtype)
+
+    # ----------------------------------------------------------------------
+    # helpers
+    # ----------------------------------------------------------------------
+    def _append(self, obs: np.ndarray) -> np.ndarray:
+        """Return `obs` with extra uniform features of matching batch shape."""
+        if self.extra_dims == 0:
+            return obs
+        # Supports shapes (n_envs, obs_dim) and (obs_dim,)
+        noise_shape = (*obs.shape[:-1], self.extra_dims)
+        noise = self.rng.uniform(self.low, self.high, size=noise_shape).astype(obs.dtype)
+        return np.concatenate([obs, noise], axis=-1)
+
+    def _patch_infos(self, infos):
+        """Make sure terminal/final observations inside `infos` are patched."""
+        for info in infos:
+            for key in ("terminal_observation", "final_observation"):
+                if key in info:
+                    info[key] = self._append(info[key])
+        return infos
+
+    def resample_mu(self):
+        """Resample the mean (mu) after each episode."""
+        self.mu = self.rng.uniform(self.low, self.high, self.extra_dims)
+
+    # ----------------------------------------------------------------------
+    # VecEnv interface
+    # ----------------------------------------------------------------------
+    def reset(self, **kwargs):
+        obs = self.venv.reset(**kwargs)          # returns only obs
+        self.resample_mu()  # Resample mu at the beginning of each episode
+        return self._append(obs)
+
+    def step_async(self, actions):
+        # Delegate to the wrapped VecEnv
+        self.venv.step_async(actions)
+
+    def step_wait(self):
+        obs, rews, dones, infos = self.venv.step_wait()
+        obs   = self._append(obs)
+        infos = self._patch_infos(infos)
+        return obs, rews, dones, infos
+
+
 class AddExtraObsDimsRamp(VecEnvWrapper):
     """
     Append `extra_dims` deterministic features to every observation.
@@ -189,7 +274,7 @@ class AddExtraObsDimsRamp(VecEnvWrapper):
         venv,
         extra_dims: int,
         noise_type: str = "linear",
-        scale: float = 0.1,
+        scale: float = 0.001,
         period: float = 10.0,
         amplitude: float = 1.0,
     ):
