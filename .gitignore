@@ -6,7 +6,8 @@ src/wandb
 *.json
 /artifacts
 *.mp4
-
+/figures
+*.png
 *.zip
 
 # Byte-compiled / optimized / DLL files
