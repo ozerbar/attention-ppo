@@ -54,7 +54,7 @@ plt.rcParams.update({
     "legend.fontsize": 7,
     "xtick.labelsize": 8,
     "ytick.labelsize": 8,
-    "lines.linewidth": 1.5,
+    "lines.linewidth": 1.2,
 })
 
 
@@ -158,8 +158,8 @@ if __name__ == "__main__":
             except (FileNotFoundError, RuntimeError) as e:
                 print(f"[!] {e}")
                 continue
-            ax.plot(steps, mean, color=color, marker=marker,
-                    markevery=0.15, linewidth=1.8, linestyle=ls, label="_nolegend_")
+            ax.plot(steps, mean, color=color, marker=marker, markersize=4,
+                    markevery=0.15, linewidth=1.2, linestyle=ls, label="_nolegend_")
 
     # Restore original title
     ax.set_title("PPO vs Attention – Uniform Noise", weight="bold")
@@ -168,11 +168,11 @@ if __name__ == "__main__":
 
     # ── custom legend: color → model, linestyle → noise dim ─────────────
     legend_handles = [
-        Line2D([0], [0], color=COLOR_PPO, lw=2, marker=MARKER_BASELINE, label="PPO"),
-        Line2D([0], [0], color=COLOR_ATTENTION, lw=2, marker=MARKER_ATTENTION, label="Attention"),
-        Line2D([0], [0], color="black", lw=2, linestyle=NOISE_STYLES["10"], label="10 dim"),
-        Line2D([0], [0], color="black", lw=2, linestyle=NOISE_STYLES["20"], label="20 dim"),
-        Line2D([0], [0], color="black", lw=2, linestyle=NOISE_STYLES["40"], label="40 dim"),
+        Line2D([0], [0], color=COLOR_PPO, lw=1.2, marker=MARKER_BASELINE, markersize=5, label="PPO"),
+        Line2D([0], [0], color=COLOR_ATTENTION, lw=1.2, marker=MARKER_ATTENTION, markersize=5, label="Attention"),
+        Line2D([0], [0], color="black", lw=1.2, linestyle=NOISE_STYLES["10"], label="10 dim"),
+        Line2D([0], [0], color="black", lw=1.2, linestyle=NOISE_STYLES["20"], label="20 dim"),
+        Line2D([0], [0], color="black", lw=1.2, linestyle=NOISE_STYLES["40"], label="40 dim"),
     ]
     ax.legend(handles=legend_handles, frameon=False, ncol=1, loc="lower right")
 
@@ -181,5 +181,5 @@ if __name__ == "__main__":
 
     os.makedirs(SAVE_DIR, exist_ok=True)
     plt.tight_layout()
-    plt.savefig(OUTPUT_FILE, dpi=300)
+    plt.savefig(OUTPUT_FILE, dpi=150)
     print(f"[✓] Figure saved to {OUTPUT_FILE}")
