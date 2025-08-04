@@ -29,29 +29,32 @@ from tensorboard.backend.event_processing import event_accumulator
 # ──────────────────────────── USER INPUT ────────────────────────────
 # Map <nice label> → <path to run1/>
 BASELINE_RUNS: Dict[str, str] = {
-    "PPO 10 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_10-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-policy_MlpPolicy/run1",
-    "PPO 20 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_20-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-policy_MlpPolicy/run1",
-    "PPO 40 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_40-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-policy_MlpPolicy/run1",
+    "PPO 40 Dim Gaussian Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_gaussian-extra_dims_40-extra_std_1.0-frames_4-policy_MlpPolicy/run1",
+    # "PPO 20 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_20-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-policy_MlpPolicy/run1",
+    # "PPO 40 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_40-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-policy_MlpPolicy/run1",
 }
 ATTN_RUNS: Dict[str, str] = {
-    "Attention 10 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_gaussian-extra_dims_40-extra_std_1.0-frames_4-attn_acttrue-attn_valtrue-attn_commonfalse-policy_FrameAttentionPolicy/run1",
-    "Attention 20 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_20-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-attn_acttrue-attn_valtrue-attn_commonfalse-policy_FrameAttentionPolicy/run1",
-    "Attention 40 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_40-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-attn_acttrue-attn_valtrue-attn_commonfalse-policy_FrameAttentionPolicy/run1",
+    "Attention 40 Dim Gaussian Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_gaussian-extra_dims_40-extra_std_1.0-frames_4-attn_acttrue-attn_valtrue-attn_commonfalse-policy_FrameAttentionPolicy/run1",
+    # "Attention 20 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_20-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-attn_acttrue-attn_valtrue-attn_commonfalse-policy_FrameAttentionPolicy/run1",
+    # "Attention 40 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_40-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-attn_acttrue-attn_valtrue-attn_commonfalse-policy_FrameAttentionPolicy/run1",
 }
 TAG: str = "rollout/ep_rew_mean"   # TensorBoard scalar to plot
 SAVE_DIR: str = "figures"
-OUTPUT_FILE: str = os.path.join(SAVE_DIR, "multi_noise_comparison_uniform.png")
+OUTPUT_FILE: str = os.path.join(SAVE_DIR, "multi_noise_comparison_Gaussian.png")
 # ────────────────────────────────────────────────────────────────────
 
 sns.set_theme(style="whitegrid")
+# Larger, bold fonts for poster readability
 plt.rcParams.update({
-    "font.size": 14,
-    "axes.titlesize": 18,
-    "axes.labelsize": 14,
-    "legend.fontsize": 12,
-    "xtick.labelsize": 12,
-    "ytick.labelsize": 12,
-    "lines.linewidth": 2.0,
+    "font.size": 16,
+    "axes.titlesize": 22,
+    "axes.labelsize": 20,
+    "axes.titleweight": "bold",
+    "axes.labelweight": "bold",
+    "legend.fontsize": 14,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
+    "lines.linewidth": 2.5,
 })
 
 
@@ -154,7 +157,7 @@ if __name__ == "__main__":
             ax.plot(steps, mean, label=lbl, color=color, marker=marker,
                     markevery=0.15, linewidth=1.8, linestyle=ls)
 
-    ax.set_title("Attention vs PPO with 10/20/40 Dim Uniform Noise (-10/+10 Range)")
+    ax.set_title("Attention vs PPO with 40 Dim Gaussian Noise")
     ax.set_xlabel("Timesteps")
     ax.set_ylabel("Episode reward (mean)")
     ax.legend(frameon=False)
