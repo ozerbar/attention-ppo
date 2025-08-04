@@ -23,38 +23,38 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import itertools
+from matplotlib.lines import Line2D
 from tensorboard.backend.event_processing import event_accumulator
 
 # ──────────────────────────── USER INPUT ────────────────────────────
 # Map <nice label> → <path to run1/>
 BASELINE_RUNS: Dict[str, str] = {
-    "PPO 40 Dim Gaussian Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_gaussian-extra_dims_40-extra_std_1.0-frames_4-policy_MlpPolicy/run1",
-    # "PPO 20 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_20-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-policy_MlpPolicy/run1",
-    # "PPO 40 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_40-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-policy_MlpPolicy/run1",
+    "PPO 10 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_10-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-policy_MlpPolicy/run1",
+    "PPO 20 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_20-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-policy_MlpPolicy/run1",
+    "PPO 40 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_40-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-policy_MlpPolicy/run1",
 }
 ATTN_RUNS: Dict[str, str] = {
-    "Attention 40 Dim Gaussian Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_gaussian-extra_dims_40-extra_std_1.0-frames_4-attn_acttrue-attn_valtrue-attn_commonfalse-policy_FrameAttentionPolicy/run1",
-    # "Attention 20 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_20-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-attn_acttrue-attn_valtrue-attn_commonfalse-policy_FrameAttentionPolicy/run1",
-    # "Attention 40 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_40-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-attn_acttrue-attn_valtrue-attn_commonfalse-policy_FrameAttentionPolicy/run1",
+    "Attention 10 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_10-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-attn_acttrue-attn_valtrue-attn_commonfalse-policy_FrameAttentionPolicy/run1",
+    "Attention 20 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_20-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-attn_acttrue-attn_valtrue-attn_commonfalse-policy_FrameAttentionPolicy/run1",
+    "Attention 40 Dim Uniform Noise": "/home/damlakonur/tum-adlr-01/tum-adlr-01/runs/LunarLanderContinuous-v3/LunarLanderContinuous-v3-x1-obs_noise_0.0-extra_obs_type_uniform-extra_dims_40-extra_std_1.0-mu_low-10.0-mu_high10.0-frames_4-attn_acttrue-attn_valtrue-attn_commonfalse-policy_FrameAttentionPolicy/run1",
 }
 TAG: str = "rollout/ep_rew_mean"   # TensorBoard scalar to plot
 SAVE_DIR: str = "figures"
-OUTPUT_FILE: str = os.path.join(SAVE_DIR, "multi_noise_comparison_Gaussian.png")
+OUTPUT_FILE: str = os.path.join(SAVE_DIR, "multi_noise_comparison_uniform.png")
 # ────────────────────────────────────────────────────────────────────
 
 sns.set_theme(style="whitegrid")
-# Larger, bold fonts for poster readability
+# Shrink font sizes to fit 5×3 inch canvas
 plt.rcParams.update({
-    "font.size": 16,
-    "axes.titlesize": 22,
-    "axes.labelsize": 20,
+    "font.size": 10,
+    "axes.titlesize": 10,
+    "axes.labelsize": 9,
     "axes.titleweight": "bold",
     "axes.labelweight": "bold",
-    "legend.fontsize": 14,
-    "xtick.labelsize": 14,
-    "ytick.labelsize": 14,
-    "lines.linewidth": 2.5,
+    "legend.fontsize": 7,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "lines.linewidth": 1.5,
 })
 
 
@@ -124,47 +124,62 @@ if __name__ == "__main__":
     if not BASELINE_RUNS or not ATTN_RUNS:
         raise SystemExit("✗ Please populate BASELINE_RUNS and ATTN_RUNS in the script header.")
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    FIGSIZE = (3.6, 2.4)   # further reduced canvas size
+    DPI = 300          # high resolution for poster printing
+    fig, ax = plt.subplots(figsize=FIGSIZE, dpi=DPI)
 
-    # Define color cycle for noise levels
-    NOISE_COLORS = {
-        "10": "tab:green",
-        "20": "tab:orange",
-        "40": "tab:purple",
+    # Color encodes *model*
+    COLOR_PPO = "purple"
+    COLOR_ATTENTION = "orange"
+
+    # Linestyle encodes *noise dimension*
+    NOISE_STYLES = {
+        "10": ":",   # dotted
+        "20": "-",    # solid
+        "40": "--",   # dashed
     }
-
     MARKER_BASELINE = "o"   # circle for PPO
-    MARKER_ATTENTION = "s"  # square for attention
-    LINESTYLE_BASELINE = "-"
-    LINESTYLE_ATTENTION = "--"
+    MARKER_ATTENTION = "s"  # square for Attention
 
     def detect_noise_dim(label: str) -> str:
         """Extract numeric noise-dimension token ('10', '20', '40', …) from label."""
         m = re.search(r"(\d+)\s*Dim", label)
         return m.group(1) if m else "unknown"
 
-    # Plot baseline and attention runs interleaved so legend groups stay ordered.
-    for mapping, marker, ls in ((BASELINE_RUNS, MARKER_BASELINE, LINESTYLE_BASELINE),
-                                (ATTN_RUNS, MARKER_ATTENTION, LINESTYLE_ATTENTION)):
+    # Plot PPO (purple) and Attention (orange)
+    for mapping, marker, model_color in ((BASELINE_RUNS, MARKER_BASELINE, COLOR_PPO),
+                                         (ATTN_RUNS, MARKER_ATTENTION, COLOR_ATTENTION)):
         for lbl, path in mapping.items():
             noise_key = detect_noise_dim(lbl)
-            color = NOISE_COLORS.get(noise_key, "grey")
+            ls = NOISE_STYLES.get(noise_key, "-")
+            color = model_color
             try:
                 steps, mean, std = _aggregate_seeds(path, TAG)
             except (FileNotFoundError, RuntimeError) as e:
                 print(f"[!] {e}")
                 continue
-            ax.plot(steps, mean, label=lbl, color=color, marker=marker,
-                    markevery=0.15, linewidth=1.8, linestyle=ls)
+            ax.plot(steps, mean, color=color, marker=marker,
+                    markevery=0.15, linewidth=1.8, linestyle=ls, label="_nolegend_")
 
-    ax.set_title("Attention vs PPO with 40 Dim Gaussian Noise")
+    # Restore original title
+    ax.set_title("PPO vs Attention – Uniform Noise", weight="bold")
     ax.set_xlabel("Timesteps")
     ax.set_ylabel("Episode reward (mean)")
-    ax.legend(frameon=False)
+
+    # ── custom legend: color → model, linestyle → noise dim ─────────────
+    legend_handles = [
+        Line2D([0], [0], color=COLOR_PPO, lw=2, marker=MARKER_BASELINE, label="PPO"),
+        Line2D([0], [0], color=COLOR_ATTENTION, lw=2, marker=MARKER_ATTENTION, label="Attention"),
+        Line2D([0], [0], color="black", lw=2, linestyle=NOISE_STYLES["10"], label="10 dim"),
+        Line2D([0], [0], color="black", lw=2, linestyle=NOISE_STYLES["20"], label="20 dim"),
+        Line2D([0], [0], color="black", lw=2, linestyle=NOISE_STYLES["40"], label="40 dim"),
+    ]
+    ax.legend(handles=legend_handles, frameon=False, ncol=1, loc="lower right")
+
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
     os.makedirs(SAVE_DIR, exist_ok=True)
     plt.tight_layout()
-    plt.savefig(OUTPUT_FILE, dpi=150)
+    plt.savefig(OUTPUT_FILE, dpi=300)
     print(f"[✓] Figure saved to {OUTPUT_FILE}")
